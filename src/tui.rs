@@ -1,23 +1,15 @@
-use crossterm::{
-    event::{self, Event, KeyCode},
-    style::Color,
-    terminal,
-};
-use diffy::{PatchFormatter, create_patch};
+use crossterm::event::{self, Event, KeyCode};
+use diffy::create_patch;
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
     layout::Rect,
-    style::{Modifier, Style, Stylize},
-    text::{Line, Span, Text, ToText},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget, Wrap},
+    style::{Modifier, Style},
+    text::{Line, Span, Text},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget},
 };
 use rayon::prelude::*;
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Display,
-    ops::Index,
-};
+use std::collections::HashMap;
 use std::{
     fs::{self},
     io::{self},
@@ -116,7 +108,7 @@ impl TuiState {
         let children = self.get_joined_paths(&full_path);
         if children.len() != 0 {
             if self.open_files.contains(&full_path) {
-                for x in children {
+                for _x in children {
                     self.file_display.remove(selected + 1);
                 }
                 let ind = self
@@ -128,7 +120,7 @@ impl TuiState {
             } else {
                 for x in children {
                     let mut tmp_display = "".to_string();
-                    for y in full_path.match_indices("/") {
+                    for _y in full_path.match_indices("/") {
                         tmp_display.push_str("  ");
                     }
                     tmp_display.push_str(&x);
@@ -141,7 +133,7 @@ impl TuiState {
         }
         self.current_file = Some(full_path);
     }
-    fn get_file_diff(&self, path: &String) -> Result<(Paragraph, Paragraph), String> {
+    fn get_file_diff(&self, path: &String) -> Result<(Paragraph<'_>, Paragraph<'_>), String> {
         let mut rel_path: String = if path.starts_with(&self.old_root) {
             path[self.old_root.len()..].to_string()
         } else if path.starts_with(&self.new_root) {
