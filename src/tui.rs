@@ -3,17 +3,19 @@ use crossterm::{
     style::Color,
     terminal,
 };
+use diffy::{PatchFormatter, create_patch};
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
     layout::Rect,
     style::{Modifier, Style, Stylize},
-    text::{Line, Text},
+    text::{Line, Span, Text, ToText},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget, Wrap},
 };
 use rayon::prelude::*;
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Display,
     ops::Index,
 };
 use std::{
@@ -98,8 +100,6 @@ impl TuiState {
         result = result
             .iter()
             .map(|x| x.to_string())
-            .collect::<HashSet<String>>()
-            .into_iter()
             .collect::<Vec<String>>();
         result.par_sort_unstable();
         result.reverse();
@@ -141,6 +141,88 @@ impl TuiState {
         }
         self.current_file = Some(full_path);
     }
+    fn get_file_diff(&self, path: &String) -> Result<(Paragraph, Paragraph), String> {
+        let mut rel_path: String = if path.starts_with(&self.old_root) {
+            path[self.old_root.len()..].to_string()
+        } else if path.starts_with(&self.new_root) {
+            path[self.new_root.len()..].to_string()
+        } else {
+            path.to_string()
+        };
+        rel_path = if !rel_path.starts_with('/') {
+            format!("{}{}", "/", rel_path)
+        } else {
+            rel_path.to_string()
+        };
+        let mut file1 = self.old_root.clone();
+        file1.push_str(&rel_path);
+        let mut file2 = self.new_root.clone();
+        file2.push_str(&rel_path);
+        //log::info!("{:?}", file1);
+        let new_file_content = fs::read_to_string(&file1);
+        let old_file_content = fs::read_to_string(&file2);
+        if let Ok(old) = &old_file_content {
+            if let Ok(new) = &new_file_content {
+                let patch = create_patch(old, new);
+                let mut old_lines: Vec<Line> = Vec::new();
+                let mut new_lines: Vec<Line> = Vec::new();
+                for hunk in patch.hunks() {
+                    for line in hunk.lines() {
+                        match line {
+                            diffy::Line::Context(content) => {
+                                let line = Line::from(Span::raw(content.to_string()));
+                                old_lines.push(line.clone());
+                                new_lines.push(line.clone());
+                            }
+                            diffy::Line::Delete(content) => {
+                                let line = Line::from(Span::styled(
+                                    content.to_string(),
+                                    ratatui::style::Color::Red,
+                                ));
+                                old_lines.push(line);
+                                new_lines.push(Line::from(Span::raw("".to_string())));
+                            }
+                            diffy::Line::Insert(content) => {
+                                let line = Line::from(Span::styled(
+                                    content.to_string(),
+                                    ratatui::style::Color::Green,
+                                ));
+                                new_lines.push(line);
+                                old_lines.push(Line::from(Span::raw("".to_string())));
+                            }
+                        }
+                    }
+                }
+                old_lines = old_lines[self
+                    .file_scroll_offset
+                    .clamp(0, old_lines.len().min(new_lines.len()))..]
+                    .to_vec();
+                new_lines = new_lines[self
+                    .file_scroll_offset
+                    .clamp(0, new_lines.len().min(old_lines.len()))..]
+                    .to_vec();
+                Ok((Paragraph::new(old_lines), Paragraph::new(new_lines)))
+            } else if let Err(e) = &new_file_content {
+                let buf = format!(
+                    "Error reading new version of file {}:\n {}",
+                    &file1.to_string(),
+                    e
+                );
+                Err(buf)
+            } else {
+                Err("unknown error".to_string())
+            }
+        } else if let Err(e) = &old_file_content {
+            let buf = format!(
+                "Error reading old version of file {}:\n {}",
+                &file1.to_string(),
+                e
+            );
+            Err(buf)
+        } else {
+            Err("unknown error".to_string())
+        }
+    }
 }
 impl StatefulWidget for &TuiState {
     type State = ListState;
@@ -181,26 +263,24 @@ impl StatefulWidget for &TuiState {
         new_area.x += file_area.width;
 
         let old_title = Line::from("Old");
-        let old_block = Block::bordered().title(old_title.centered()).title_bottom("<-/->: Move filenames L/R; pgUp/pgDn: Scroll files; up/down/Enter: choose next/last/current file".to_string());
+        let old_block = Block::bordered().title(old_title.centered()).title_bottom(
+            "<-/->: Move filenames; pgUp/pgDn: Scroll files; up/down/Enter: choose file"
+                .to_string(),
+        );
         let mut old_area = new_area;
         old_area.height -= 1;
         old_area.y += file_area.height / 2;
-        let mut path = self.current_file.clone().unwrap_or("".to_string());
-        let mut res = fs::read_to_string(&path);
-        if let Ok(new_file) = &res {
-            let scrolled_file: Vec<String> = new_file
-                .split('\n')
-                .map(|x| x.to_string())
-                .collect::<Vec<String>>()
-                .as_slice()
-                .to_vec();
-            Paragraph::new(Text::from(
-                scrolled_file[self.file_scroll_offset.clamp(0, scrolled_file.len())..].join("\n"),
-            ))
-            .left_aligned()
-            .block(new_block)
-            .wrap(Wrap { trim: true })
-            .render(new_area, buf);
+        let path = self.current_file.clone().unwrap_or("".to_string());
+        let res = self.get_file_diff(&path);
+        if let Ok((old_file, new_file)) = res {
+            old_file
+                .block(old_block)
+                .left_aligned()
+                .render(old_area, buf);
+            new_file
+                .block(new_block)
+                .left_aligned()
+                .render(new_area, buf);
         } else if let Err(e) = &res {
             let mut par: String = "Error while opening file ".into();
             par.push_str(&path);
@@ -210,33 +290,6 @@ impl StatefulWidget for &TuiState {
                 .left_aligned()
                 .block(new_block)
                 .render(new_area, buf);
-        }
-        path = "".to_string();
-        path = self.current_file.clone().unwrap_or(path);
-        res = fs::read_to_string(&path);
-        if let Ok(old_file) = &res {
-            let scrolled_file: Vec<String> = old_file
-                .split('\n')
-                .map(|x| x.to_string())
-                .collect::<Vec<String>>()
-                .as_slice()
-                .to_vec();
-            Paragraph::new(Text::from(
-                scrolled_file[self.file_scroll_offset.clamp(0, scrolled_file.len())..].join("\n"),
-            ))
-            .left_aligned()
-            .block(old_block)
-            .wrap(Wrap { trim: true })
-            .render(old_area, buf);
-        } else if let Err(e) = res {
-            let mut par: String = "Error while opening file ".into();
-            par.push_str(&path);
-            par.push_str(":\n");
-            par.push_str(&e.to_string());
-            Paragraph::new(Text::from(par))
-                .left_aligned()
-                .block(old_block)
-                .render(old_area, buf);
         }
     }
 }

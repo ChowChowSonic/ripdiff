@@ -4,7 +4,6 @@ mod multivisitor;
 mod tui;
 use crate::multivisitor::MyVisitorBuilder;
 use crate::tui::TuiState;
-//use diffy::{PatchFormatter, create_patch};
 use ignore::WalkBuilder;
 use std::collections::HashSet;
 use std::env;
@@ -90,6 +89,8 @@ fn main() -> Result<(), std::io::Error> {
             .collect::<HashSet<(String, String)>>()
             .into_par_iter()
             .collect();
+        let mut seen = HashSet::new();
+        folder_display.retain(|(_, f)| seen.insert(f.clone()));
         folder_display.par_sort_unstable();
         folder_display.reverse();
         let status = format!(
