@@ -5,11 +5,11 @@ use ratatui::{
     buffer::Buffer,
     layout::Rect,
     style::{Modifier, Style},
-    text::{Line, Span, Text},
+    text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget},
 };
 use rayon::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::{
     fs::{self},
     io::{self},
@@ -105,7 +105,9 @@ impl TuiState {
         let mut full_path: String = current_dir.clone().0.to_string();
         full_path.push('/');
         full_path.push_str(current_dir.1.clone().trim_start());
-        let children = self.get_joined_paths(&full_path);
+        let mut children = self.get_joined_paths(&full_path);
+        let mut seen = HashSet::new();
+        children.retain(|x| seen.insert(x.clone()));
         if children.len() != 0 {
             if self.open_files.contains(&full_path) {
                 for _x in children {
@@ -133,7 +135,7 @@ impl TuiState {
         }
         self.current_file = Some(full_path);
     }
-    fn get_file_diff(&self, path: &String) -> Result<(Paragraph<'_>, Paragraph<'_>), String> {
+    fn get_file_diff(&self, path: &String, height: usize) -> (Paragraph<'_>, Paragraph<'_>) {
         let mut rel_path: String = if path.starts_with(&self.old_root) {
             path[self.old_root.len()..].to_string()
         } else if path.starts_with(&self.new_root) {
@@ -151,69 +153,50 @@ impl TuiState {
         let mut file2 = self.new_root.clone();
         file2.push_str(&rel_path);
         //log::info!("{:?}", file1);
-        let new_file_content = fs::read_to_string(&file1);
-        let old_file_content = fs::read_to_string(&file2);
-        if let Ok(old) = &old_file_content {
-            if let Ok(new) = &new_file_content {
-                let patch = create_patch(old, new);
-                let mut old_lines: Vec<Line> = Vec::new();
-                let mut new_lines: Vec<Line> = Vec::new();
-                for hunk in patch.hunks() {
-                    for line in hunk.lines() {
-                        match line {
-                            diffy::Line::Context(content) => {
-                                let line = Line::from(Span::raw(content.to_string()));
-                                old_lines.push(line.clone());
-                                new_lines.push(line.clone());
-                            }
-                            diffy::Line::Delete(content) => {
-                                let line = Line::from(Span::styled(
-                                    content.to_string(),
-                                    ratatui::style::Color::Red,
-                                ));
-                                old_lines.push(line);
-                                new_lines.push(Line::from(Span::raw("".to_string())));
-                            }
-                            diffy::Line::Insert(content) => {
-                                let line = Line::from(Span::styled(
-                                    content.to_string(),
-                                    ratatui::style::Color::Green,
-                                ));
-                                new_lines.push(line);
-                                old_lines.push(Line::from(Span::raw("".to_string())));
-                            }
-                        }
+        let mut old_lines: Vec<Line> = Vec::new();
+        let mut new_lines: Vec<Line> = Vec::new();
+        let new_file_content = fs::read_to_string(&file1)
+            .unwrap_or_else(|e| format!("Error reading file {}:\n{}", &file1, e));
+        let old_file_content = fs::read_to_string(&file2)
+            .unwrap_or_else(|e| format!("Error reading file {}:\n{}", &file1, e));
+
+        let patch = create_patch(&old_file_content, &new_file_content);
+        for hunk in patch.hunks() {
+            for line in hunk.lines() {
+                match line {
+                    diffy::Line::Context(content) => {
+                        let line = Line::from(Span::raw(content.to_string()));
+                        old_lines.push(line.clone());
+                        new_lines.push(line.clone());
+                    }
+                    diffy::Line::Delete(content) => {
+                        let line = Line::from(Span::styled(
+                            content.to_string(),
+                            ratatui::style::Color::Red,
+                        ));
+                        old_lines.push(line);
+                        new_lines.push(Line::from(Span::raw("".to_string())));
+                    }
+                    diffy::Line::Insert(content) => {
+                        let line = Line::from(Span::styled(
+                            content.to_string(),
+                            ratatui::style::Color::Green,
+                        ));
+                        new_lines.push(line);
+                        old_lines.push(Line::from(Span::raw("".to_string())));
                     }
                 }
-                old_lines = old_lines[self
-                    .file_scroll_offset
-                    .clamp(0, old_lines.len().min(new_lines.len()))..]
-                    .to_vec();
-                new_lines = new_lines[self
-                    .file_scroll_offset
-                    .clamp(0, new_lines.len().min(old_lines.len()))..]
-                    .to_vec();
-                Ok((Paragraph::new(old_lines), Paragraph::new(new_lines)))
-            } else if let Err(e) = &new_file_content {
-                let buf = format!(
-                    "Error reading new version of file {}:\n {}",
-                    &file1.to_string(),
-                    e
-                );
-                Err(buf)
-            } else {
-                Err("unknown error".to_string())
             }
-        } else if let Err(e) = &old_file_content {
-            let buf = format!(
-                "Error reading old version of file {}:\n {}",
-                &file1.to_string(),
-                e
-            );
-            Err(buf)
-        } else {
-            Err("unknown error".to_string())
         }
+        let stop = self.file_scroll_offset + height;
+
+        old_lines = old_lines
+            [self.file_scroll_offset.clamp(0, old_lines.len())..stop.clamp(0, old_lines.len())]
+            .to_vec();
+        new_lines = new_lines
+            [self.file_scroll_offset.clamp(0, new_lines.len())..stop.clamp(0, new_lines.len())]
+            .to_vec();
+        (Paragraph::new(old_lines), Paragraph::new(new_lines))
     }
 }
 impl StatefulWidget for &TuiState {
@@ -252,6 +235,7 @@ impl StatefulWidget for &TuiState {
         let mut new_area = area;
         new_area.width *= 2;
         new_area.width /= 3;
+        new_area.height = area.height / 2;
         new_area.x += file_area.width;
 
         let old_title = Line::from("Old");
@@ -263,25 +247,14 @@ impl StatefulWidget for &TuiState {
         old_area.height -= 1;
         old_area.y += file_area.height / 2;
         let path = self.current_file.clone().unwrap_or("".to_string());
-        let res = self.get_file_diff(&path);
-        if let Ok((old_file, new_file)) = res {
-            old_file
-                .block(old_block)
-                .left_aligned()
-                .render(old_area, buf);
-            new_file
-                .block(new_block)
-                .left_aligned()
-                .render(new_area, buf);
-        } else if let Err(e) = &res {
-            let mut par: String = "Error while opening file ".into();
-            par.push_str(&path);
-            par.push_str(":\n");
-            par.push_str(&e.to_string());
-            Paragraph::new(Text::from(par))
-                .left_aligned()
-                .block(new_block)
-                .render(new_area, buf);
-        }
+        let (old_file, new_file) = self.get_file_diff(&path, old_area.height as usize);
+        old_file
+            .block(old_block)
+            .left_aligned()
+            .render(old_area, buf);
+        new_file
+            .block(new_block)
+            .left_aligned()
+            .render(new_area, buf);
     }
 }
