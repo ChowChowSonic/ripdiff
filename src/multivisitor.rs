@@ -1,7 +1,6 @@
-use ignore::{DirEntry, ParallelVisitor, ParallelVisitorBuilder, WalkBuilder, WalkState};
-use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
-use std::sync::{Arc, LazyLock, Mutex};
+use ignore::{ParallelVisitor, ParallelVisitorBuilder, WalkState};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 // 1. The Visitor: Holds thread-local data
 pub struct MultiVisitor {
@@ -14,19 +13,18 @@ impl ParallelVisitor for MultiVisitor {
         if let Ok(entry) = entry
             && let Ok(children) = entry.path().read_dir()
         {
-            self.local_files.insert(
-                entry.path().to_str().unwrap_or(&"").to_string(),
-                children
-                    .into_iter()
-                    .filter_map(|x| x.ok())
-                    .map(|x| {
-                        x.file_name()
-                            .to_str()
-                            .expect("Failed to unwrap path")
-                            .to_string()
-                    })
-                    .collect::<Vec<String>>(),
-            );
+            let childs = children
+                .into_iter()
+                .filter_map(|x| x.ok())
+                .map(|x| {
+                    x.file_name()
+                        .to_str()
+                        .expect("Failed to unwrap path")
+                        .to_string()
+                })
+                .collect::<Vec<String>>();
+            self.local_files
+                .insert(entry.path().to_str().unwrap_or(&"").to_string(), childs);
         }
         WalkState::Continue
     }

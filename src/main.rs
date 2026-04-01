@@ -69,36 +69,11 @@ fn main() -> Result<(), std::io::Error> {
             .drain(),
     );
     let t3 = start.elapsed();
-    let t4 = start.elapsed();
-    let t5 = start.elapsed();
-    let t6 = start.elapsed();
-    let t7 = start.elapsed();
-    let t8 = start.elapsed();
-    //let index = make_index(&total_folders);
-    let t9 = start.elapsed();
-
-    //log::info!("dirs under /checkup-db-100");
-    //list_files("/checkup-db-1000".to_string(), &new_trie);
-    //log::info!("dirs under /");
-    //list_files("".to_string(), &new_trie);
-    //log::info!("all dirs");
-    /*
-    for x in oldmap.iter() {
-        log::info!("{:?}", &x);
-    }
-    // */
     log::info!("Read old files in {:?} ", t1);
-    //log::info!("Initialized old file btree in {:?} ", t2 - t1);
     log::info!("Read new files in {:?} ", t3 - t2);
-    //log::info!("Initialized new btree in {:?} ", t4 - t3);
-    log::info!("Merged contents of old and new in {:?}", t4 - t3);
-    log::info!("String conversion completed in {:?}", t5 - t4);
-    log::info!("Directory sorting executed in {:?}", t6 - t5);
-    log::info!("Built btree from files in {:?}", t7 - t6);
-    log::info!("Retrieving root dirs comnpleted in {:?}", t8 - t7);
     ratatui::run(|terminal| {
         let size = terminal.size().expect("Unable to get terminal size");
-        let mut fd1 = oldmap.index(&args[1]).clone();
+        let fd1 = oldmap.index(&args[1]).clone();
         let mut folder_display: Vec<(String, String)> = fd1
             .iter()
             .map(|x| (args[1].to_string(), x.to_string()))
@@ -115,6 +90,8 @@ fn main() -> Result<(), std::io::Error> {
             .collect::<HashSet<(String, String)>>()
             .into_par_iter()
             .collect();
+        folder_display.par_sort_unstable();
+        folder_display.reverse();
         let status = format!(
             "TTT: {:?}; Files: {:?}",
             start.elapsed(),

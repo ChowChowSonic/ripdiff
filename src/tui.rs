@@ -12,7 +12,10 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget, Wrap},
 };
 use rayon::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Index,
+};
 use std::{
     fs::{self},
     io::{self},
@@ -53,6 +56,7 @@ impl TuiState {
                     self.exit = true;
                 }
                 KeyCode::Enter => {
+                    self.file_scroll_offset = 0;
                     self.open_file_or_dir();
                 }
                 KeyCode::Up => {
@@ -66,6 +70,14 @@ impl TuiState {
                     if self.file_name_offset > 0 {
                         self.file_name_offset -= 1;
                     }
+                }
+                KeyCode::PageUp => {
+                    if self.file_scroll_offset > 0 {
+                        self.file_scroll_offset -= 1;
+                    }
+                }
+                KeyCode::PageDown => {
+                    self.file_scroll_offset += 1;
                 }
                 _ => {}
             }
@@ -83,12 +95,15 @@ impl TuiState {
         let y = self.new_files.get(path).cloned().unwrap_or(tmpvec);
         let mut result = x;
         result.extend(y);
-        result
+        result = result
             .iter()
             .map(|x| x.to_string())
             .collect::<HashSet<String>>()
             .into_iter()
-            .collect()
+            .collect::<Vec<String>>();
+        result.par_sort_unstable();
+        result.reverse();
+        result
     }
 
     fn open_file_or_dir(&mut self) {
@@ -121,8 +136,8 @@ impl TuiState {
                         .insert(selected + 1, (full_path.clone(), tmp_display));
                 }
                 self.open_files.push(full_path);
-                return;
             }
+            return;
         }
         self.current_file = Some(full_path);
     }
@@ -166,35 +181,59 @@ impl StatefulWidget for &TuiState {
         new_area.x += file_area.width;
 
         let old_title = Line::from("Old");
-        let old_block = Block::bordered().title(old_title.centered());
+        let old_block = Block::bordered().title(old_title.centered()).title_bottom("<-/->: Move filenames L/R; pgUp/pgDn: Scroll files; up/down/Enter: choose next/last/current file".to_string());
         let mut old_area = new_area;
         old_area.height -= 1;
         old_area.y += file_area.height / 2;
         let mut path = self.current_file.clone().unwrap_or("".to_string());
-        let res = fs::read_to_string(&path);
+        let mut res = fs::read_to_string(&path);
         if let Ok(new_file) = &res {
-            //Paragraph::new(Text::from(new_file))
-            Paragraph::new(Text::from(new_file.to_string()))
-                .left_aligned()
-                .block(new_block)
-                .wrap(Wrap { trim: true })
-                .render(new_area, buf);
+            let scrolled_file: Vec<String> = new_file
+                .split('\n')
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>()
+                .as_slice()
+                .to_vec();
+            Paragraph::new(Text::from(
+                scrolled_file[self.file_scroll_offset.clamp(0, scrolled_file.len())..].join("\n"),
+            ))
+            .left_aligned()
+            .block(new_block)
+            .wrap(Wrap { trim: true })
+            .render(new_area, buf);
         } else if let Err(e) = &res {
-            Paragraph::new(Text::from(e.to_string()))
+            let mut par: String = "Error while opening file ".into();
+            par.push_str(&path);
+            par.push_str(":\n");
+            par.push_str(&e.to_string());
+            Paragraph::new(Text::from(par))
                 .left_aligned()
                 .block(new_block)
                 .render(new_area, buf);
         }
         path = "".to_string();
         path = self.current_file.clone().unwrap_or(path);
-        if let Ok(old_file) = fs::read_to_string(&path) {
-            Paragraph::new(Text::from(old_file))
-                .left_aligned()
-                .block(old_block)
-                .wrap(Wrap { trim: true })
-                .render(old_area, buf);
-        } else {
-            Paragraph::new(Text::from(path.to_string()))
+        res = fs::read_to_string(&path);
+        if let Ok(old_file) = &res {
+            let scrolled_file: Vec<String> = old_file
+                .split('\n')
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>()
+                .as_slice()
+                .to_vec();
+            Paragraph::new(Text::from(
+                scrolled_file[self.file_scroll_offset.clamp(0, scrolled_file.len())..].join("\n"),
+            ))
+            .left_aligned()
+            .block(old_block)
+            .wrap(Wrap { trim: true })
+            .render(old_area, buf);
+        } else if let Err(e) = res {
+            let mut par: String = "Error while opening file ".into();
+            par.push_str(&path);
+            par.push_str(":\n");
+            par.push_str(&e.to_string());
+            Paragraph::new(Text::from(par))
                 .left_aligned()
                 .block(old_block)
                 .render(old_area, buf);
