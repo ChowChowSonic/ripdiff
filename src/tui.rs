@@ -97,7 +97,31 @@ impl TuiState {
         result.reverse();
         result
     }
-
+    fn close_dir(&mut self, path: &String, children: &Vec<String>) {
+        for x in children {
+            let mut full_path = path.clone();
+            full_path.push('/');
+            full_path.push_str(x.clone().trim_start());
+            if self.open_files.contains(&full_path) {
+                let child_dirs = self.get_joined_paths(&full_path);
+                self.close_dir(&full_path, &child_dirs);
+            }
+        }
+        self.file_display.retain(|(pth, file)| {
+            !children
+                .clone()
+                .iter()
+                .map(|x| x.trim_start().to_string())
+                .collect::<Vec<String>>()
+                .contains(&file.clone().trim_start().to_string())
+        });
+        let ind = self
+            .open_files
+            .iter()
+            .position(|x| x == path)
+            .expect("Failed to find path in open files");
+        self.open_files.remove(ind);
+    }
     fn open_file_or_dir(&mut self) {
         let selected = self.state.selected().unwrap_or(0);
         let tmpval = ("".to_string(), "".to_string());
@@ -110,15 +134,7 @@ impl TuiState {
         children.retain(|x| seen.insert(x.clone()));
         if children.len() != 0 {
             if self.open_files.contains(&full_path) {
-                for _x in children {
-                    self.file_display.remove(selected + 1);
-                }
-                let ind = self
-                    .open_files
-                    .iter()
-                    .position(|x| *x == full_path)
-                    .expect("Failed to find path in open files");
-                self.open_files.remove(ind);
+                self.close_dir(&full_path, &children);
             } else {
                 for x in children {
                     let mut tmp_display = "".to_string();
@@ -152,11 +168,17 @@ impl TuiState {
         file1.push_str(&rel_path);
         let mut file2 = self.new_root.clone();
         file2.push_str(&rel_path);
-        //log::info!("{:?}", file1);
         let mut old_lines: Vec<Line> = Vec::new();
         let mut new_lines: Vec<Line> = Vec::new();
         let new_file_content = fs::read_to_string(&file1)
             .unwrap_or_else(|e| format!("Error reading file {}:\n{}", &file1, e));
+
+        let old_file_content = if file1 != file2 {
+            fs::read_to_string(&file2)
+                .unwrap_or_else(|e| format!("Error reading file {}:\n{}", &file1, e))
+        } else {
+            new_file_content.clone()
+        };
         let old_file_content = fs::read_to_string(&file2)
             .unwrap_or_else(|e| format!("Error reading file {}:\n{}", &file1, e));
 
@@ -220,7 +242,6 @@ impl StatefulWidget for &TuiState {
                 )
             })
             .collect();
-        //log::info!("{:?} {:?}", self.state.selected(), state.selected());
         let list: List = List::new(tmp_array)
             .block(file_block)
             .highlight_style(Modifier::REVERSED)
@@ -244,7 +265,6 @@ impl StatefulWidget for &TuiState {
                 .to_string(),
         );
         let mut old_area = new_area;
-        old_area.height -= 1;
         old_area.y += file_area.height / 2;
         let path = self.current_file.clone().unwrap_or("".to_string());
         let (old_file, new_file) = self.get_file_diff(&path, old_area.height as usize);
