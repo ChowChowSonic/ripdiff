@@ -138,7 +138,11 @@ impl TuiState {
             } else {
                 for x in children {
                     let mut tmp_display = "".to_string();
-                    for _y in full_path.match_indices("/") {
+                    let fp_temp =
+                        full_path
+                            .replacen(&self.old_root, "", 1)
+                            .replacen(&self.new_root, "", 1);
+                    for _y in fp_temp.match_indices("/") {
                         tmp_display.push_str("  ");
                     }
                     tmp_display.push_str(&x);
