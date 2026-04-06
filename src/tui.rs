@@ -174,24 +174,36 @@ impl TuiState {
         file2.push_str(&rel_path);
         let mut old_lines: Vec<Line> = Vec::new();
         let mut new_lines: Vec<Line> = Vec::new();
-        let new_file_content = fs::read_to_string(&file1)
+        let old_file_content = fs::read_to_string(&file1)
             .unwrap_or_else(|e| format!("Error reading file {}:\n{}", &file1, e));
 
-        let old_file_content = if file1 != file2 {
+        let new_file_content = if file1 != file2 {
             fs::read_to_string(&file2)
                 .unwrap_or_else(|e| format!("Error reading file {}:\n{}", &file1, e))
         } else {
-            new_file_content.clone()
+            old_file_content.clone()
         };
-        let old_file_content = fs::read_to_string(&file2)
-            .unwrap_or_else(|e| format!("Error reading file {}:\n{}", &file1, e));
-
+        let lines: Vec<_> = old_file_content.split('\n').collect();
         let patch = create_patch(&old_file_content, &new_file_content);
+        let mut current_line_idx = 0;
         for hunk in patch.hunks() {
+            let start_of_hunk = hunk.old_range().start() - 1;
+            while current_line_idx < start_of_hunk {
+                let line = Line::from(Span::raw(
+                    lines
+                        .get(current_line_idx)
+                        .expect("Unable to get next line of file")
+                        .to_string(),
+                ));
+                old_lines.push(line.clone());
+                new_lines.push(line.clone());
+                current_line_idx += 1;
+            }
             for line in hunk.lines() {
                 match line {
                     diffy::Line::Context(content) => {
                         let line = Line::from(Span::raw(content.to_string()));
+                        current_line_idx += 1;
                         old_lines.push(line.clone());
                         new_lines.push(line.clone());
                     }
@@ -200,8 +212,12 @@ impl TuiState {
                             content.to_string(),
                             ratatui::style::Color::Red,
                         ));
+                        current_line_idx += 1;
                         old_lines.push(line);
-                        new_lines.push(Line::from(Span::raw("".to_string())));
+                        new_lines.push(Line::from(Span::styled(
+                            " ".to_string(),
+                            ratatui::style::Style::new().bg(ratatui::style::Color::DarkGray),
+                        )));
                     }
                     diffy::Line::Insert(content) => {
                         let line = Line::from(Span::styled(
@@ -209,7 +225,10 @@ impl TuiState {
                             ratatui::style::Color::Green,
                         ));
                         new_lines.push(line);
-                        old_lines.push(Line::from(Span::raw("".to_string())));
+                        old_lines.push(Line::from(Span::styled(
+                            " ".to_string(),
+                            ratatui::style::Style::new().bg(ratatui::style::Color::DarkGray),
+                        )));
                     }
                 }
             }
