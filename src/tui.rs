@@ -199,9 +199,24 @@ impl TuiState {
                 new_lines.push(line.clone());
                 current_line_idx += 1;
             }
+            let mut num_modded_lines: i64 = 0;
             for line in hunk.lines() {
                 match line {
                     diffy::Line::Context(content) => {
+                        while num_modded_lines > 0 {
+                            old_lines.push(Line::from(Span::styled(
+                                " ".to_string(),
+                                ratatui::style::Style::new().bg(ratatui::style::Color::DarkGray),
+                            )));
+                            num_modded_lines -= 1;
+                        }
+                        while num_modded_lines < 0 {
+                            new_lines.push(Line::from(Span::styled(
+                                " ".to_string(),
+                                ratatui::style::Style::new().bg(ratatui::style::Color::DarkGray),
+                            )));
+                            num_modded_lines += 1;
+                        }
                         let line = Line::from(Span::raw(content.to_string()));
                         current_line_idx += 1;
                         old_lines.push(line.clone());
@@ -214,10 +229,7 @@ impl TuiState {
                         ));
                         current_line_idx += 1;
                         old_lines.push(line);
-                        new_lines.push(Line::from(Span::styled(
-                            " ".to_string(),
-                            ratatui::style::Style::new().bg(ratatui::style::Color::DarkGray),
-                        )));
+                        num_modded_lines -= 1
                     }
                     diffy::Line::Insert(content) => {
                         let line = Line::from(Span::styled(
@@ -225,12 +237,24 @@ impl TuiState {
                             ratatui::style::Color::Green,
                         ));
                         new_lines.push(line);
-                        old_lines.push(Line::from(Span::styled(
-                            " ".to_string(),
-                            ratatui::style::Style::new().bg(ratatui::style::Color::DarkGray),
-                        )));
+                        num_modded_lines += 1
                     }
                 }
+            }
+
+            while num_modded_lines > 0 {
+                old_lines.push(Line::from(Span::styled(
+                    " ".to_string(),
+                    ratatui::style::Style::new().bg(ratatui::style::Color::DarkGray),
+                )));
+                num_modded_lines -= 1;
+            }
+            while num_modded_lines < 0 {
+                new_lines.push(Line::from(Span::styled(
+                    " ".to_string(),
+                    ratatui::style::Style::new().bg(ratatui::style::Color::DarkGray),
+                )));
+                num_modded_lines += 1;
             }
         }
         let stop = self.file_scroll_offset + height;
