@@ -65,12 +65,12 @@ impl TuiState {
                         self.file_name_offset -= 1;
                     }
                 }
-                KeyCode::PageUp => {
+                KeyCode::Char('k') | KeyCode::PageUp => {
                     if self.file_scroll_offset > 0 {
                         self.file_scroll_offset -= 1;
                     }
                 }
-                KeyCode::PageDown => {
+                KeyCode::Char('j') | KeyCode::PageDown => {
                     self.file_scroll_offset += 1;
                 }
                 _ => {}
@@ -308,8 +308,7 @@ impl StatefulWidget for &TuiState {
 
         let old_title = Line::from("Old");
         let old_block = Block::bordered().title(old_title.centered()).title_bottom(
-            "<-/->: Move filenames; pgUp/pgDn: Scroll files; up/down/Enter: choose file"
-                .to_string(),
+            "<-/->: Move filenames; k/j: Scroll files; up/down/Enter: choose file".to_string(),
         );
         let mut old_area = new_area;
         old_area.y += file_area.height / 2;
