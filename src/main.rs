@@ -84,11 +84,6 @@ fn main() -> Result<(), std::io::Error> {
             .map(|x| (args[2].to_string(), x.to_string()))
             .collect();
         folder_display.extend(fd2);
-        folder_display = folder_display
-            .into_par_iter()
-            .collect::<HashSet<(String, String)>>()
-            .into_par_iter()
-            .collect();
         let mut seen = HashSet::new();
         folder_display.retain(|(_, f)| seen.insert(f.clone()));
         folder_display.par_sort_unstable();
