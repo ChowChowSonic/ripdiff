@@ -1,0 +1,3 @@
+This file is part of the new subtree.
+It replaces structural/old_only_subtree/sub_a.txt
+from the old directory.

@@ -1,0 +1,5 @@
+Nested file - OLD version.
+This line will stay the same.
+This line will be modified.
+This line will be deleted.
+This line will also stay the same.

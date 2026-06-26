@@ -1,0 +1,4 @@
+Deepest modified file - OLD.
+This line changed in new.
+Line three stays.
+Line four changed in new.

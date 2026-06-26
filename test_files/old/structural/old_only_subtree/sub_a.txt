@@ -1,0 +1,2 @@
+This entire subtree exists only in old.
+File: structural/old_only_subtree/sub_a.txt

@@ -1,0 +1,5 @@
+Deepest modified file - NEW.
+This line changed in new.  <-- MODIFIED
+Line three stays.
+Line four changed in new too.  <-- MODIFIED
+Line five - added in new.

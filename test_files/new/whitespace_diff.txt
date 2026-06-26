@@ -1,0 +1,4 @@
+Line with trailing spaces:
+Another line with trailing spaces:
+Line without trailing spaces
+Last line with trailing tab:

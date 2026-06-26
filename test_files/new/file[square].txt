@@ -1,0 +1,2 @@
+This filename has square brackets.
+It only exists in the new directory.

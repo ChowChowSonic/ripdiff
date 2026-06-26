@@ -1,0 +1,2 @@
+Picture file in old.
+Path: reorg/images/pic.txt

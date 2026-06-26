@@ -1,0 +1,2 @@
+This nested file only exists in new.
+It is at nested/added_only_new.txt

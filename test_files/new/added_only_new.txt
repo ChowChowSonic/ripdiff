@@ -1,0 +1,3 @@
+This file only exists in the new directory.
+It was added in the new version.
+The old pane should show an error when trying to read it.

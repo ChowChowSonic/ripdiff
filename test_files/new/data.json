@@ -1,0 +1,10 @@
+{
+    "name": "test",
+    "version": 2,
+    "enabled": false,
+    "config": {
+        "timeout": 60,
+        "retries": 5,
+        "backoff": "exponential"
+    }
+}

@@ -1,0 +1,13 @@
+[server]
+host = "0.0.0.0"
+port = 9090
+
+[database]
+url = "postgres://prod/mydb"
+pool_size = 20
+ssl_mode = "require"
+
+[logging]
+level = "debug"
+file = "/var/log/app.log"
+format = "json"

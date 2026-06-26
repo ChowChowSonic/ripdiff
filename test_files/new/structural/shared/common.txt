@@ -1,0 +1,3 @@
+This file exists in both old and new
+under the structural/shared/ directory.
+It has the same content in both.

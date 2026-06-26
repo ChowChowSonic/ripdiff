@@ -1,0 +1,2 @@
+Deep file in old-only subtree.
+Path: structural/old_only_subtree/sub_b/sub_c.txt

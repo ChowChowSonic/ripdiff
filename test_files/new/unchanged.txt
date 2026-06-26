@@ -1,0 +1,4 @@
+This file is unchanged between old and new.
+It has the same content in both directories.
+This is line three.
+And this is line four.

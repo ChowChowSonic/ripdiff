@@ -1,0 +1,5 @@
+Line 1: This is the first line of the file.
+Line 2: This line will be modified in the new version.
+Line 3: This line stays exactly the same.
+Line 4: This line will be deleted from the new version.
+Line 5: This is the final line.

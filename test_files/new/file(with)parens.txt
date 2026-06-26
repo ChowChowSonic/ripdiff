@@ -1,0 +1,2 @@
+This filename has parentheses.
+It should still be handled correctly.

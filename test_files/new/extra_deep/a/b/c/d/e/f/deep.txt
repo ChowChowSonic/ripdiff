@@ -1,0 +1,4 @@
+This file is 6 levels deep in the new directory.
+It only exists in the new tree to test
+extreme nesting depth handling.
+Path: extra_deep/a/b/c/d/e/f/deep.txt

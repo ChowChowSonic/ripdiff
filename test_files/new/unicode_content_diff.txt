@@ -1,0 +1,4 @@
+This file tests unicode content changes.
+The word 研究 means research in Chinese.
+Resume should have accents.
+研究 and cafe are different words.

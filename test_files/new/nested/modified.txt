@@ -1,0 +1,5 @@
+Nested file - NEW version.
+This line will stay the same.
+THIS LINE HAS BEEN MODIFIED IN THE NEW VERSION.
+This is a brand new line added in the new version.
+This line will also stay the same.

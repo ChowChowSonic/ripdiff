@@ -1,0 +1,3 @@
+This is file.txt in dir${i}.
+Content is the same across all directories
+in the many_dirs test group.

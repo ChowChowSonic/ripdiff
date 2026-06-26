@@ -1,0 +1,2 @@
+LOGO file in new.
+Path: reorg/nested/assets/logo.txt

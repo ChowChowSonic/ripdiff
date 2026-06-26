@@ -1,0 +1,3 @@
+Nested unchanged file.
+Same content in both old and new.
+This is at testdir/nested/unchanged.txt

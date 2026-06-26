@@ -1,0 +1,5 @@
+Deep modified file - NEW.
+THIS CONTENT IS DIFFERENT FROM THE OLD VERSION.
+Line three of the new version.
+Line four of the new version.
+Line five - additional line in new.

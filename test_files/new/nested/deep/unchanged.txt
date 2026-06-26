@@ -1,0 +1,3 @@
+Deep nested unchanged file.
+Same in both directories.
+Path: nested/deep/unchanged.txt

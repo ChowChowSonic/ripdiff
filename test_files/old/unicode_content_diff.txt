@@ -1,0 +1,4 @@
+This file tests unicode content changes.
+The word cafe is French for coffee.
+Resume should have accents.
+Naive and uber are common borrowings.

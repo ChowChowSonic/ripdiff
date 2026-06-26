@@ -1,0 +1,2 @@
+Picture file in new.
+Path: reorg/deep/images/pic.txt

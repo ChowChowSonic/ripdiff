@@ -1,0 +1,39 @@
+Stanza 1: The fruit is apple.
+Stanza 1: This is the second line about apple.
+Stanza 1: The third and final line about apple.
+
+Stanza 2: The fruit is banana.
+Stanza 2: This is the second line about banana.
+Stanza 2: The third and final line about banana.
+
+Stanza 3: The fruit is cherry.
+Stanza 3: This is the second line about cherry.
+Stanza 3: The third and final line about cherry.
+
+Stanza 4: The fruit is date.
+Stanza 4: This is the second line about date.
+Stanza 4: The third and final line about date.
+
+Stanza 5: The fruit is elderberry.
+Stanza 5: This is the second line about elderberry.
+Stanza 5: The third and final line about elderberry.
+
+Stanza 6: The fruit is fig.
+Stanza 6: This is the second line about fig.
+Stanza 6: The third and final line about fig.
+
+Stanza 7: The fruit is grape.
+Stanza 7: This is the second line about grape.
+Stanza 7: The third and final line about grape.
+
+Stanza 8: The fruit is honeydew.
+Stanza 8: This is the second line about honeydew.
+Stanza 8: The third and final line about honeydew.
+
+Stanza 9: The fruit is kiwi.
+Stanza 9: This is the second line about kiwi.
+Stanza 9: The third and final line about kiwi.
+
+Stanza 10: The fruit is lemon.
+Stanza 10: This is the second line about lemon.
+Stanza 10: The third and final line about lemon.

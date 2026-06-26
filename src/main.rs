@@ -1,10 +1,8 @@
+use ripdiff::multivisitor::MyVisitorBuilder;
+use ripdiff::tui::TuiState;
+use ignore::WalkBuilder;
 use ratatui::widgets::ListState;
 use rayon::prelude::*;
-mod multivisitor;
-mod tui;
-use crate::multivisitor::MyVisitorBuilder;
-use crate::tui::TuiState;
-use ignore::WalkBuilder;
 use std::collections::HashSet;
 use std::env;
 use std::thread::available_parallelism;
@@ -71,7 +69,6 @@ fn main() -> Result<(), std::io::Error> {
     log::info!("Read old files in {:?} ", t1);
     log::info!("Read new files in {:?} ", t3 - t2);
     ratatui::run(|terminal| {
-        let size = terminal.size().expect("Unable to get terminal size");
         let fd1 = oldmap.index(&args[1]).clone();
         let mut folder_display: Vec<(String, String)> = fd1
             .iter()
@@ -101,7 +98,6 @@ fn main() -> Result<(), std::io::Error> {
             new_files: newmap,
             bottom_status: status,
             file_display: folder_display,
-            terminal_size: size,
             file_name_offset: 0,
             file_scroll_offset: 0,
             state: ListState::default(),

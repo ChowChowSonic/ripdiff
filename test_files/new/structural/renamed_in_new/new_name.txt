@@ -1,0 +1,3 @@
+This file was 'old_name.txt' in the old directory.
+In the new directory, it has been 'renamed' to new_name.txt.
+The content may also differ.

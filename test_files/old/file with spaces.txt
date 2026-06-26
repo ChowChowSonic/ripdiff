@@ -1,0 +1,3 @@
+This file has spaces in its name.
+It tests path handling with spaces.
+Line three of the spaces file.
