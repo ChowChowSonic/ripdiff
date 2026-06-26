@@ -51,7 +51,10 @@ impl TuiState {
             .map(|(_path, name)| {
                 let start = self.file_name_offset.min(name.len());
                 let end = max_offset.min(name.len());
-                ListItem::new(&name[start..end])
+                let mut indices = name.char_indices().map(|(i, _)| i);
+                let byte_start = indices.nth(start).unwrap_or(name.len());
+                let byte_end = indices.nth(end - start - 1).unwrap_or(name.len());
+                ListItem::new(&name[byte_start..byte_end])
             })
             .collect();
 
