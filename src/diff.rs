@@ -29,12 +29,10 @@ pub fn get_file_diff(
     let file2 = format!("{}{}", new_root, rel_path);
     let mut old_lines: Vec<Line> = Vec::new();
     let mut new_lines: Vec<Line> = Vec::new();
-    let old_file_content = fs::read_to_string(&file1)
-        .unwrap_or_else(|e| format!("Error reading file {}:\n{}", &file1, e));
+    let old_file_content = fs::read_to_string(&file1).unwrap_or_else(|_| "".to_string());
 
     let new_file_content = if file1 != file2 {
-        fs::read_to_string(&file2)
-            .unwrap_or_else(|e| format!("Error reading file {}:\n{}", &file2, e))
+        fs::read_to_string(&file2).unwrap_or_else(|_| "".to_string())
     } else {
         old_file_content.clone()
     };
@@ -108,12 +106,10 @@ pub fn get_file_diff(
     }
     let stop = scroll_offset + height;
 
-    old_lines = old_lines
-        [scroll_offset.clamp(0, old_lines.len())..stop.clamp(0, old_lines.len())]
-        .to_vec();
-    new_lines = new_lines
-        [scroll_offset.clamp(0, new_lines.len())..stop.clamp(0, new_lines.len())]
-        .to_vec();
+    old_lines =
+        old_lines[scroll_offset.clamp(0, old_lines.len())..stop.clamp(0, old_lines.len())].to_vec();
+    new_lines =
+        new_lines[scroll_offset.clamp(0, new_lines.len())..stop.clamp(0, new_lines.len())].to_vec();
     (Paragraph::new(old_lines), Paragraph::new(new_lines))
 }
 
