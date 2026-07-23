@@ -15,7 +15,7 @@ pub fn draw(frame: &mut Frame, state: &mut TuiState) {
     if !state.hide_sidebar {
         let file_block = Block::bordered()
             .title_top(Line::from("Files"))
-            .title_bottom(Line::from(state.bottom_status.clone()))
+            .title_bottom(Line::from(state.bottom_status.to_string()))
             .borders(Borders::ALL);
         let max_offset = file_area.width as usize + state.file_name_offset;
 

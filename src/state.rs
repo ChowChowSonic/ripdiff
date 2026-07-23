@@ -29,11 +29,17 @@ impl TuiState {
         file_display: Vec<(String, String)>,
         bottom_status: String,
         theme: Theme,
+        hide_sidebar: bool,
     ) -> Self {
+        let starting_file = if hide_sidebar {
+            Some(format!("{}{}", file_display[0].0, file_display[0].1))
+        } else {
+            None
+        };
         Self {
             old_root,
             new_root,
-            current_file: None,
+            current_file: starting_file,
             old_files,
             new_files,
             file_display,
@@ -44,7 +50,7 @@ impl TuiState {
             exit: false,
             open_files: Vec::new(),
             theme,
-            hide_sidebar: false,
+            hide_sidebar,
         }
     }
 

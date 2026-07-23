@@ -19,36 +19,41 @@ pub struct App {
     pub new_dir: PathBuf,
 }
 
+fn load_path(path: &PathBuf) -> (HashMap<String, Vec<String>>, String) {
+    if path.is_file() {
+        let root = path
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| ".".to_string());
+        let file_name = path
+            .file_name()
+            .expect("Failed to get file name")
+            .to_string_lossy()
+            .to_string();
+        let mut map = HashMap::new();
+        map.insert(root.clone(), vec![file_name]);
+        (map, root)
+    } else {
+        let root = path.to_string_lossy().to_string();
+        let mut map = HashMap::new();
+        map.extend(
+            parallel_dir_load(path)
+                .lock()
+                .expect("Unable to lock file set")
+                .drain(),
+        );
+        (map, root)
+    }
+}
+
 impl App {
     pub fn run(self) -> anyhow::Result<()> {
         let start = Instant::now();
 
-        let oldmap = {
-            let mut map = HashMap::new();
-            map.extend(
-                parallel_dir_load(&self.old_dir)
-                    .lock()
-                    .expect("Unable to lock old file set")
-                    .drain(),
-            );
-            map
-        };
-
-        let newmap = {
-            let mut map = HashMap::new();
-            map.extend(
-                parallel_dir_load(&self.new_dir)
-                    .lock()
-                    .expect("Unable to lock new file set")
-                    .drain(),
-            );
-            map
-        };
+        let (oldmap, old_root) = load_path(&self.old_dir);
+        let (newmap, new_root) = load_path(&self.new_dir);
 
         log::info!("Read files in {:?}", start.elapsed());
-
-        let old_root = self.old_dir.to_string_lossy().to_string();
-        let new_root = self.new_dir.to_string_lossy().to_string();
 
         let mut folder_display: Vec<(String, String)> = oldmap
             .get(&old_root)
@@ -72,7 +77,7 @@ impl App {
         folder_display.par_sort_unstable();
         folder_display.reverse();
 
-        let status = format!("Files: {:?}", oldmap.len() + newmap.len());
+        let status = format!("TTT: {}ms; TAB: Toggle", start.elapsed().as_millis());
         let theme = Theme::default();
 
         let mut state = TuiState::new(
@@ -83,6 +88,7 @@ impl App {
             folder_display,
             status,
             theme,
+            self.new_dir.is_file() && self.old_dir.is_file(),
         );
 
         ratatui::run(|terminal| {
