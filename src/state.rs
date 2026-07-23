@@ -33,7 +33,9 @@ impl TuiState {
         hide_sidebar: bool,
     ) -> Self {
         let starting_file = if hide_sidebar {
-            Some(format!("{}{}", file_display[0].0, file_display[0].1))
+            file_display
+                .first()
+                .map(|(dir, file)| format!("{dir}/{}", file.trim_start()))
         } else {
             None
         };
@@ -190,6 +192,138 @@ mod tests {
     }
 
     #[test]
+    fn test_get_joined_paths_both_empty_returns_none() {
+        let old = HashMap::new();
+        let new = HashMap::new();
+        let result = get_joined_paths("/dir", &old, &new);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_new_hide_sidebar_true_sets_current_file() {
+        let state = TuiState::new(
+            "/root".into(),
+            "/root".into(),
+            HashMap::new(),
+            HashMap::new(),
+            vec![("/root".into(), "file.txt".into())],
+            "status".into(),
+            Theme::default(),
+            true,
+        );
+        assert_eq!(state.current_file, Some("/root/file.txt".to_string()));
+    }
+
+    #[test]
+    fn test_new_hide_sidebar_false_no_current_file() {
+        let state = TuiState::new(
+            "/root".into(),
+            "/root".into(),
+            HashMap::new(),
+            HashMap::new(),
+            vec![("/root".into(), "file.txt".into())],
+            "status".into(),
+            Theme::default(),
+            false,
+        );
+        assert_eq!(state.current_file, None);
+    }
+
+    #[test]
+    fn test_new_hide_sidebar_true_empty_display() {
+        let state = TuiState::new(
+            "/root".into(),
+            "/root".into(),
+            HashMap::new(),
+            HashMap::new(),
+            vec![],
+            "status".into(),
+            Theme::default(),
+            true,
+        );
+        assert_eq!(state.current_file, None);
+    }
+
+    #[test]
+    fn test_new_default_fields() {
+        let state = TuiState::new(
+            "/a".into(),
+            "/b".into(),
+            HashMap::new(),
+            HashMap::new(),
+            vec![],
+            "s".into(),
+            Theme::default(),
+            false,
+        );
+        assert_eq!(state.file_name_offset, 0);
+        assert_eq!(state.file_scroll_offset, 0);
+        assert!(!state.exit);
+        assert!(state.open_files.is_empty());
+        assert_eq!(state.old_root, "/a");
+        assert_eq!(state.new_root, "/b");
+    }
+
+    #[test]
+    fn test_close_dir_recursive_nesting() {
+        let mut state = make_state();
+        state.old_files = HashMap::from([
+            ("/a".to_string(), vec!["b".to_string()]),
+            ("/a/b".to_string(), vec!["c".to_string()]),
+        ]);
+        state.open_files = vec!["/a".to_string(), "/a/b".to_string(), "/a/b/c".to_string()];
+        state.file_display = vec![
+            ("/".to_string(), "a".to_string()),
+            ("/a".to_string(), "  b".to_string()),
+            ("/a/b".to_string(), "    c".to_string()),
+        ];
+        let children_of_a = vec!["b".to_string()];
+
+        state.close_dir("/a", &children_of_a);
+
+        assert!(!state.open_files.contains(&"/a".to_string()));
+        assert!(!state.open_files.contains(&"/a/b".to_string()));
+        assert!(!state.open_files.contains(&"/a/b/c".to_string()));
+        // Root entry ("/", "a") survives since its parent is "/", not "/a"
+        assert_eq!(state.file_display.len(), 1);
+        assert_eq!(state.file_display[0].0, "/");
+    }
+
+    #[test]
+    fn test_close_dir_partial_recursive_skip_not_open() {
+        let mut state = make_state();
+        state.old_files = HashMap::from([("/a".to_string(), vec!["b".to_string()])]);
+        state.open_files = vec!["/a".to_string(), "/a/b".to_string()];
+        state.file_display = vec![
+            ("/".to_string(), "a".to_string()),
+            ("/a".to_string(), "  b".to_string()),
+            ("/a".to_string(), "  c".to_string()),
+        ];
+        let children_of_a = vec!["b".to_string(), "c".to_string()];
+
+        state.close_dir("/a", &children_of_a);
+
+        assert!(!state.open_files.contains(&"/a".to_string()));
+        assert!(!state.open_files.contains(&"/a/b".to_string()));
+        // Root entry "/" → "a" survives, children removed
+        assert_eq!(state.file_display.len(), 1);
+    }
+
+    #[test]
+    fn test_close_dir_no_children_noop() {
+        let mut state = make_state();
+        state.open_files = vec!["/root".to_string()];
+        state.file_display = vec![("/root".to_string(), "file".to_string())];
+        let children: Vec<String> = vec![];
+
+        state.close_dir("/root", &children);
+
+        assert!(state.open_files.is_empty());
+        assert_eq!(state.file_display.len(), 1);
+        assert_eq!(state.file_display[0].1, "file");
+    }
+
+    #[test]
     fn test_close_dir_does_not_affect_same_named_entries_from_other_paths() {
         let mut state = make_state();
         state.open_files = vec![
@@ -216,51 +350,6 @@ mod tests {
                 .open_files
                 .contains(&"/same_name/same_name".to_string())
         );
-    }
-
-    #[test]
-    fn test_close_dir_removes_only_own_children() {
-        let mut state = make_state();
-        state.open_files = vec![
-            "/other".to_string(),
-            "/other/same_name".to_string(),
-            "/same_name".to_string(),
-            "/same_name/same_name".to_string(),
-        ];
-        state.file_display = vec![
-            ("/root".to_string(), "other/same_name".to_string()),
-            ("/root".to_string(), "other".to_string()),
-            ("/root".to_string(), "same_name".to_string()),
-            ("/root".to_string(), "same_name/same_name".to_string()),
-        ];
-        let children = vec![
-            "/other/same_name".to_string(),
-            "/same_name/same_name".to_string(),
-        ];
-
-        state.close_dir("/same_name/same_name", &children);
-
-        assert!(
-            !state
-                .open_files
-                .contains(&"/same_name/same_name".to_string())
-        );
-        assert!(state.open_files.contains(&"/same_name".to_string()));
-        assert!(!state.file_display.is_empty());
-    }
-
-    #[test]
-    fn test_close_dir_no_children_noop() {
-        let mut state = make_state();
-        state.open_files = vec!["/root".to_string()];
-        state.file_display = vec![("/root".to_string(), "file".to_string())];
-        let children: Vec<String> = vec![];
-
-        state.close_dir("/root", &children);
-
-        assert!(state.open_files.is_empty());
-        assert_eq!(state.file_display.len(), 1);
-        assert_eq!(state.file_display[0].1, "file");
     }
 
     #[test]
@@ -350,5 +439,149 @@ mod tests {
         state.open_file_or_dir();
 
         assert!(!state.open_files.contains(&"/old/dir".to_string()));
+    }
+
+    #[test]
+    fn test_open_file_or_dir_no_selection_defaults_to_first() {
+        let mut state = TuiState {
+            old_root: "/root".to_string(),
+            new_root: "/root".to_string(),
+            current_file: None,
+            old_files: HashMap::from([("/root".to_string(), vec!["a.txt".to_string()])]),
+            new_files: HashMap::new(),
+            file_display: vec![("/root".to_string(), "a.txt".to_string())],
+            bottom_status: String::new(),
+            file_name_offset: 0,
+            file_scroll_offset: 0,
+            state: ListState::default(),
+            exit: false,
+            open_files: Vec::new(),
+            theme: Theme::default(),
+            hide_sidebar: false,
+        };
+        // No select_first() called → selected() returns None
+
+        state.open_file_or_dir();
+
+        assert_eq!(state.current_file, Some("/root/a.txt".to_string()));
+    }
+
+    #[test]
+    fn test_open_file_or_dir_empty_file_display() {
+        let mut state = make_state();
+        // No select called, empty display
+
+        state.open_file_or_dir();
+
+        // Should handle gracefully without panicking
+        assert_eq!(state.current_file, Some("/".to_string()));
+    }
+
+    #[test]
+    fn test_open_file_or_dir_children_from_both_sides_deduped() {
+        let mut state = TuiState {
+            old_root: "/root".to_string(),
+            new_root: "/root".to_string(),
+            current_file: None,
+            old_files: HashMap::from([
+                ("/root".to_string(), vec!["dir".to_string()]),
+                (
+                    "/root/dir".to_string(),
+                    vec!["shared.txt".to_string(), "old_only.txt".to_string()],
+                ),
+            ]),
+            new_files: HashMap::from([(
+                "/root/dir".to_string(),
+                vec!["shared.txt".to_string(), "new_only.txt".to_string()],
+            )]),
+            file_display: vec![("/root".to_string(), "dir".to_string())],
+            bottom_status: String::new(),
+            file_name_offset: 0,
+            file_scroll_offset: 0,
+            state: ListState::default(),
+            exit: false,
+            open_files: Vec::new(),
+            theme: Theme::default(),
+            hide_sidebar: false,
+        };
+        state.state.select_first();
+
+        state.open_file_or_dir();
+
+        assert!(state.open_files.contains(&"/root/dir".to_string()));
+        // shared.txt should only appear once in file_display children
+        let shared_entries: Vec<&(String, String)> = state
+            .file_display
+            .iter()
+            .filter(|(_, f)| f.trim() == "shared.txt")
+            .collect();
+        assert_eq!(shared_entries.len(), 1, "shared.txt should be deduped");
+    }
+
+    #[test]
+    fn test_open_file_or_dir_multi_level_open_close() {
+        let mut state = TuiState {
+            old_root: "/root".to_string(),
+            new_root: "/root".to_string(),
+            current_file: None,
+            old_files: HashMap::from([
+                ("/root".to_string(), vec!["a".to_string()]),
+                ("/root/a".to_string(), vec!["b".to_string()]),
+                ("/root/a/b".to_string(), vec!["c.txt".to_string()]),
+            ]),
+            new_files: HashMap::new(),
+            file_display: vec![("/root".to_string(), "a".to_string())],
+            bottom_status: String::new(),
+            file_name_offset: 0,
+            file_scroll_offset: 0,
+            state: ListState::default(),
+            exit: false,
+            open_files: Vec::new(),
+            theme: Theme::default(),
+            hide_sidebar: false,
+        };
+        state.state.select_first();
+
+        // open a → shows b
+        state.open_file_or_dir();
+        assert!(state.open_files.contains(&"/root/a".to_string()));
+
+        state.state.select_next();
+
+        // open b → shows c.txt
+        state.open_file_or_dir();
+        assert!(state.open_files.contains(&"/root/a/b".to_string()));
+
+        state.state.select_previous();
+
+        // close a → should recursively close a/b too
+        state.open_file_or_dir();
+        assert!(!state.open_files.contains(&"/root/a".to_string()));
+        assert!(!state.open_files.contains(&"/root/a/b".to_string()));
+    }
+
+    #[test]
+    fn test_open_file_or_dir_root_from_new_side() {
+        let mut state = TuiState {
+            old_root: "/old".to_string(),
+            new_root: "/new".to_string(),
+            current_file: None,
+            old_files: HashMap::new(),
+            new_files: HashMap::from([("/new".to_string(), vec!["file.txt".to_string()])]),
+            file_display: vec![("/new".to_string(), "file.txt".to_string())],
+            bottom_status: String::new(),
+            file_name_offset: 0,
+            file_scroll_offset: 0,
+            state: ListState::default(),
+            exit: false,
+            open_files: Vec::new(),
+            theme: Theme::default(),
+            hide_sidebar: false,
+        };
+        state.state.select_first();
+
+        state.open_file_or_dir();
+
+        assert_eq!(state.current_file, Some("/new/file.txt".to_string()));
     }
 }

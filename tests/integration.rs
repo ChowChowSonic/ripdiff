@@ -250,3 +250,65 @@ fn test_scroll_offset_returns_subset_of_lines() {
     old_p.render(Rect::new(0, 0, 80, 10), &mut buf);
     assert!(format!("{:?}", buf).contains("006"));
 }
+
+#[test]
+fn test_load_path_loads_file() {
+    use ripdiff::app::load_path;
+    use std::path::PathBuf;
+
+    let path = PathBuf::from("test_files/old/unchanged.txt");
+    let (map, root) = load_path(&path);
+
+    assert_eq!(root, "test_files/old");
+    assert_eq!(
+        map.get("test_files/old"),
+        Some(&vec!["unchanged.txt".to_string()])
+    );
+}
+
+#[test]
+fn test_load_path_loads_directory() {
+    use ripdiff::app::load_path;
+    use std::path::PathBuf;
+
+    let path = PathBuf::from("test_files/old");
+    let (map, root) = load_path(&path);
+
+    assert_eq!(root, "test_files/old");
+    assert!(
+        map.contains_key("test_files/old"),
+        "root should exist in map"
+    );
+    assert!(map.len() > 1, "should have multiple directory entries");
+}
+
+#[test]
+fn test_load_path_file_in_subdir() {
+    use ripdiff::app::load_path;
+    use std::path::PathBuf;
+
+    let path = PathBuf::from("test_files/old/nested/unchanged.txt");
+    let (map, root) = load_path(&path);
+
+    assert_eq!(root, "test_files/old/nested");
+    assert_eq!(
+        map.get("test_files/old/nested"),
+        Some(&vec!["unchanged.txt".to_string()])
+    );
+}
+
+#[test]
+fn test_load_path_file_in_current_dir() {
+    use ripdiff::app::load_path;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fs::write("_test_temp_file.txt", "temp").unwrap();
+    let path = PathBuf::from("_test_temp_file.txt");
+    let (map, root) = load_path(&path);
+    fs::remove_file("_test_temp_file.txt").unwrap();
+
+    // Bare filename has empty-string parent → map key is ""
+    assert_eq!(map.get(""), Some(&vec!["_test_temp_file.txt".to_string()]));
+    assert_eq!(root, "");
+}

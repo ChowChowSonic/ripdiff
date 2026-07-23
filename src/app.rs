@@ -19,7 +19,7 @@ pub struct App {
     pub new_dir: PathBuf,
 }
 
-fn load_path(path: &PathBuf) -> (HashMap<String, Vec<String>>, String) {
+pub fn load_path(path: &PathBuf) -> (HashMap<String, Vec<String>>, String) {
     if path.is_file() {
         let root = path
             .parent()

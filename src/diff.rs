@@ -123,13 +123,17 @@ pub fn get_file_diff(
 mod tests {
     use super::*;
     use crate::config::Theme;
+    use ratatui::style::Color;
+
+    const OLD_DIR: &str = "test_files/old";
+    const NEW_DIR: &str = "test_files/new";
 
     #[test]
-    fn test_get_file_diff_unchanged_file() {
+    fn test_path_starts_with_old_root() {
         let theme = Theme::default();
-        let (_old_p, _new_p) = get_file_diff(
-            "test_files/old",
-            "test_files/new",
+        let (old_p, new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
             "test_files/old/unchanged.txt",
             0,
             10,
@@ -142,18 +146,18 @@ mod tests {
 
         let mut old_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
         let mut new_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
-        _old_p.render(Rect::new(0, 0, 80, 10), &mut old_buf);
-        _new_p.render(Rect::new(0, 0, 80, 10), &mut new_buf);
+        old_p.render(Rect::new(0, 0, 80, 10), &mut old_buf);
+        new_p.render(Rect::new(0, 0, 80, 10), &mut new_buf);
         assert_eq!(format!("{:?}", old_buf), format!("{:?}", new_buf));
     }
 
     #[test]
-    fn test_get_file_diff_missing_file_old_side() {
+    fn test_path_starts_with_new_root() {
         let theme = Theme::default();
-        let (old_p, _new_p) = get_file_diff(
-            "test_files/old",
-            "test_files/new",
-            "test_files/old/added_only_new.txt",
+        let (old_p, new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
+            "test_files/new/unchanged.txt",
             0,
             10,
             &theme,
@@ -163,19 +167,81 @@ mod tests {
         use ratatui::layout::Rect;
         use ratatui::widgets::Widget;
 
-        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 10));
-        old_p.render(Rect::new(0, 0, 80, 10), &mut buf);
-        // old pane renders empty (file not found → empty string)
-        let rendered = format!("{:?}", buf);
-        assert!(!rendered.is_empty(), "old pane should render without panic");
+        let mut old_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        let mut new_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        old_p.render(Rect::new(0, 0, 80, 10), &mut old_buf);
+        new_p.render(Rect::new(0, 0, 80, 10), &mut new_buf);
+        assert_eq!(format!("{:?}", old_buf), format!("{:?}", new_buf));
     }
 
     #[test]
-    fn test_get_file_diff_scroll_offset() {
+    fn test_path_matches_neither_root() {
+        let theme = Theme::default();
+        let (old_p, new_p) = get_file_diff(OLD_DIR, NEW_DIR, "/nonexistent/path", 0, 10, &theme);
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let mut old_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        let mut new_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        old_p.render(Rect::new(0, 0, 80, 10), &mut old_buf);
+        new_p.render(Rect::new(0, 0, 80, 10), &mut new_buf);
+        // Both read attempts fail → both panes are empty
+        assert_eq!(format!("{:?}", old_buf), format!("{:?}", new_buf));
+    }
+
+    #[test]
+    fn test_identical_old_new_root() {
+        let theme = Theme::default();
+        let (old_p, new_p) = get_file_diff(
+            OLD_DIR,
+            OLD_DIR,
+            "test_files/old/unchanged.txt",
+            0,
+            10,
+            &theme,
+        );
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let mut old_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        let mut new_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        old_p.render(Rect::new(0, 0, 80, 10), &mut old_buf);
+        new_p.render(Rect::new(0, 0, 80, 10), &mut new_buf);
+        assert_eq!(format!("{:?}", old_buf), format!("{:?}", new_buf));
+    }
+
+    #[test]
+    fn test_scroll_offset_zero() {
         let theme = Theme::default();
         let (old_p, _new_p) = get_file_diff(
-            "test_files/old",
-            "test_files/new",
+            OLD_DIR,
+            NEW_DIR,
+            "test_files/old/many_lines.txt",
+            0,
+            5,
+            &theme,
+        );
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 5));
+        old_p.render(Rect::new(0, 0, 80, 5), &mut buf);
+        let rendered = format!("{:?}", buf);
+        assert!(rendered.contains("001"), "should start at beginning");
+    }
+
+    #[test]
+    fn test_scroll_offset_mid_file() {
+        let theme = Theme::default();
+        let (old_p, _new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
             "test_files/old/many_lines.txt",
             5,
             10,
@@ -189,31 +255,72 @@ mod tests {
         let mut buf = Buffer::empty(Rect::new(0, 0, 80, 10));
         old_p.render(Rect::new(0, 0, 80, 10), &mut buf);
         let rendered = format!("{:?}", buf);
-        assert!(
-            rendered.contains("006"),
-            "scrolled content should start around line 006"
-        );
+        assert!(rendered.contains("006"), "should start around line 006");
     }
 
     #[test]
-    fn test_get_file_diff_binary_file() {
+    fn test_scroll_offset_beyond_file() {
         let theme = Theme::default();
-        let (_old_p, _new_p) = get_file_diff(
-            "test_files/old",
-            "test_files/new",
-            "test_files/old/binary.bin",
-            0,
-            10,
+        let (old_p, _new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
+            "test_files/old/single_line.txt",
+            100,
+            5,
             &theme,
         );
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 5));
+        old_p.render(Rect::new(0, 0, 80, 5), &mut buf);
     }
 
     #[test]
-    fn test_get_file_diff_modified_file_has_diff() {
+    fn test_scroll_height_exceeds_file() {
+        let theme = Theme::default();
+        let (old_p, _new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
+            "test_files/old/single_line.txt",
+            0,
+            500,
+            &theme,
+        );
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 500));
+        old_p.render(Rect::new(0, 0, 80, 500), &mut buf);
+    }
+
+    #[test]
+    fn test_empty_file_identical() {
+        let theme = Theme::default();
+        let (old_p, new_p) =
+            get_file_diff(OLD_DIR, NEW_DIR, "test_files/old/empty.txt", 0, 10, &theme);
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let mut old_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        let mut new_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        old_p.render(Rect::new(0, 0, 80, 10), &mut old_buf);
+        new_p.render(Rect::new(0, 0, 80, 10), &mut new_buf);
+        assert_eq!(format!("{:?}", old_buf), format!("{:?}", new_buf));
+    }
+
+    #[test]
+    fn test_modified_file_shows_diff() {
         let theme = Theme::default();
         let (old_p, new_p) = get_file_diff(
-            "test_files/old",
-            "test_files/new",
+            OLD_DIR,
+            NEW_DIR,
             "test_files/old/modified.txt",
             0,
             20,
@@ -228,11 +335,192 @@ mod tests {
         let mut new_buf = Buffer::empty(Rect::new(0, 0, 80, 20));
         old_p.render(Rect::new(0, 0, 80, 20), &mut old_buf);
         new_p.render(Rect::new(0, 0, 80, 20), &mut new_buf);
-        let old_rendered = format!("{:?}", old_buf);
-        let new_rendered = format!("{:?}", new_buf);
-        assert_ne!(
-            old_rendered, new_rendered,
-            "modified file should produce different old/new panes"
+        assert_ne!(format!("{:?}", old_buf), format!("{:?}", new_buf));
+    }
+
+    #[test]
+    fn test_file_only_in_new_side() {
+        let theme = Theme::default();
+        let (old_p, _new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
+            "test_files/old/added_only_new.txt",
+            0,
+            10,
+            &theme,
         );
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        old_p.render(Rect::new(0, 0, 80, 10), &mut buf);
+    }
+
+    #[test]
+    fn test_file_only_in_old_side() {
+        let theme = Theme::default();
+        let (_old_p, new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
+            "test_files/old/deleted_only_old.txt",
+            0,
+            10,
+            &theme,
+        );
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        new_p.render(Rect::new(0, 0, 80, 10), &mut buf);
+    }
+
+    #[test]
+    fn test_binary_file_does_not_panic() {
+        let theme = Theme::default();
+        let (_old_p, _new_p) =
+            get_file_diff(OLD_DIR, NEW_DIR, "test_files/old/binary.bin", 0, 10, &theme);
+    }
+
+    #[test]
+    fn test_unicode_filename() {
+        let theme = Theme::default();
+        let (_old_p, _new_p) =
+            get_file_diff(OLD_DIR, NEW_DIR, "test_files/old/中文.txt", 0, 10, &theme);
+    }
+
+    #[test]
+    fn test_spaces_in_filename() {
+        let theme = Theme::default();
+        let (_old_p, _new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
+            "test_files/old/file with spaces.txt",
+            0,
+            10,
+            &theme,
+        );
+    }
+
+    #[test]
+    fn test_rel_path_preserves_existing_slash() {
+        let theme = Theme::default();
+        let (old_p, new_p) = get_file_diff(
+            "test_files/old",
+            "test_files/new",
+            "test_files/old/nested/deep/deeper/unchanged.txt",
+            0,
+            10,
+            &theme,
+        );
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let mut old_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        let mut new_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        old_p.render(Rect::new(0, 0, 80, 10), &mut old_buf);
+        new_p.render(Rect::new(0, 0, 80, 10), &mut new_buf);
+        assert_eq!(format!("{:?}", old_buf), format!("{:?}", new_buf));
+    }
+
+    #[test]
+    fn test_whitespace_changes_produce_diff() {
+        let theme = Theme::default();
+        let (old_p, new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
+            "test_files/old/whitespace_diff.txt",
+            0,
+            10,
+            &theme,
+        );
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let mut old_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        let mut new_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        old_p.render(Rect::new(0, 0, 80, 10), &mut old_buf);
+        new_p.render(Rect::new(0, 0, 80, 10), &mut new_buf);
+        assert_ne!(format!("{:?}", old_buf), format!("{:?}", new_buf));
+    }
+
+    #[test]
+    fn test_theme_colors_applied_to_diff() {
+        let theme = Theme {
+            added: Color::Blue,
+            removed: Color::Yellow,
+            padding: Color::Cyan,
+        };
+        let (old_p, new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
+            "test_files/old/modified.txt",
+            0,
+            20,
+            &theme,
+        );
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let mut old_buf = Buffer::empty(Rect::new(0, 0, 80, 20));
+        let mut new_buf = Buffer::empty(Rect::new(0, 0, 80, 20));
+        old_p.render(Rect::new(0, 0, 80, 20), &mut old_buf);
+        new_p.render(Rect::new(0, 0, 80, 20), &mut new_buf);
+        assert_ne!(format!("{:?}", old_buf), format!("{:?}", new_buf));
+    }
+
+    #[test]
+    fn test_deeply_nested_unchanged() {
+        let theme = Theme::default();
+        let (old_p, new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
+            "test_files/old/nested/deep/deeper/unchanged.txt",
+            0,
+            10,
+            &theme,
+        );
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let mut old_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        let mut new_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        old_p.render(Rect::new(0, 0, 80, 10), &mut old_buf);
+        new_p.render(Rect::new(0, 0, 80, 10), &mut new_buf);
+        assert_eq!(format!("{:?}", old_buf), format!("{:?}", new_buf));
+    }
+
+    #[test]
+    fn test_many_hunks_produces_diff() {
+        let theme = Theme::default();
+        let (old_p, new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
+            "test_files/old/many_hunks.txt",
+            0,
+            50,
+            &theme,
+        );
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let mut old_buf = Buffer::empty(Rect::new(0, 0, 80, 50));
+        let mut new_buf = Buffer::empty(Rect::new(0, 0, 80, 50));
+        old_p.render(Rect::new(0, 0, 80, 50), &mut old_buf);
+        new_p.render(Rect::new(0, 0, 80, 50), &mut new_buf);
+        assert_ne!(format!("{:?}", old_buf), format!("{:?}", new_buf));
     }
 }
