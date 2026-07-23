@@ -23,7 +23,7 @@ cargo build --release
 ## Usage
 
 ```bash
-ripdiff <old_directory> <new_directory>
+ripdiff <old_directory|old_file> <new_directory|new_file>
 ```
 
 ### Keybindings
