@@ -21,6 +21,7 @@ pub struct TuiState {
 }
 
 impl TuiState {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         old_root: String,
         new_root: String,
