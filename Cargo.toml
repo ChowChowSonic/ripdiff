@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
 crossterm = "0.29.0"
 diffy = "0.4.2"
 ignore = "0.4.25"
