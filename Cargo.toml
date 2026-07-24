@@ -7,7 +7,7 @@ edition = "2024"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 crossterm = "0.29.0"
-diffy = "0.4.2"
+diffy = "0.5.1"
 ignore = "0.4.25"
 log = "0.4.29"
 ratatui = "0.30.0"
