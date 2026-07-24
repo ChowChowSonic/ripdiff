@@ -5,8 +5,10 @@ use crate::walker::parallel_dir_load;
 use clap::Parser;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
+use tempfile::tempdir;
 
 #[derive(Parser)]
 #[command(
@@ -19,20 +21,20 @@ pub struct App {
     pub new_dir: PathBuf,
 }
 
-pub fn load_path(path: &PathBuf) -> (HashMap<String, Vec<String>>, String) {
+pub fn load_path(path: &PathBuf, temp_path: &Path) -> (HashMap<String, Vec<String>>, String) {
     if path.is_file() {
-        let root = path
-            .parent()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|| ".".to_string());
-        let file_name = path
-            .file_name()
-            .expect("Failed to get file name")
-            .to_string_lossy()
-            .to_string();
+        fs::create_dir_all(temp_path).expect("Unable to create temp directory");
+        let dest = temp_path.join("file.txt");
+        fs::copy(path, &dest).expect("Failed to copy file to temp directory");
         let mut map = HashMap::new();
-        map.insert(root.clone(), vec![file_name]);
-        (map, root)
+        map.insert(
+            temp_path
+                .to_str()
+                .expect("Unable to retrieve temporary path")
+                .to_string(),
+            vec!["file.txt".to_string()],
+        );
+        (map, temp_path.to_string_lossy().to_string())
     } else {
         let root = path.to_string_lossy().to_string();
         let mut map = HashMap::new();
@@ -49,9 +51,11 @@ pub fn load_path(path: &PathBuf) -> (HashMap<String, Vec<String>>, String) {
 impl App {
     pub fn run(self) -> anyhow::Result<()> {
         let start = Instant::now();
-
-        let (oldmap, old_root) = load_path(&self.old_dir);
-        let (newmap, new_root) = load_path(&self.new_dir);
+        let temp_dir = tempdir()?;
+        let new_dir = temp_dir.path().join("new");
+        let old_dir = temp_dir.path().join("old");
+        let (oldmap, old_root) = load_path(&self.old_dir, &old_dir);
+        let (newmap, new_root) = load_path(&self.new_dir, &new_dir);
 
         log::info!("Read files in {:?}", start.elapsed());
 

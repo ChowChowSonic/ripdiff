@@ -255,15 +255,16 @@ fn test_scroll_offset_returns_subset_of_lines() {
 fn test_load_path_loads_file() {
     use ripdiff::app::load_path;
     use std::path::PathBuf;
+    use tempfile::tempdir;
 
     let path = PathBuf::from("test_files/old/unchanged.txt");
-    let (map, root) = load_path(&path);
+    let temp = tempdir().unwrap();
+    let temp_path = temp.path().join("old");
+    let (map, root) = load_path(&path, &temp_path);
 
-    assert_eq!(root, "test_files/old");
-    assert_eq!(
-        map.get("test_files/old"),
-        Some(&vec!["unchanged.txt".to_string()])
-    );
+    assert!(root.contains("old"), "root should be the temp dir");
+    assert_eq!(map.get(&root), Some(&vec!["file.txt".to_string()]));
+    assert!(temp_path.join("file.txt").exists());
 }
 
 #[test]
@@ -272,7 +273,8 @@ fn test_load_path_loads_directory() {
     use std::path::PathBuf;
 
     let path = PathBuf::from("test_files/old");
-    let (map, root) = load_path(&path);
+    let temp = PathBuf::from("/tmp/dummy");
+    let (map, root) = load_path(&path, &temp);
 
     assert_eq!(root, "test_files/old");
     assert!(
@@ -286,15 +288,16 @@ fn test_load_path_loads_directory() {
 fn test_load_path_file_in_subdir() {
     use ripdiff::app::load_path;
     use std::path::PathBuf;
+    use tempfile::tempdir;
 
     let path = PathBuf::from("test_files/old/nested/unchanged.txt");
-    let (map, root) = load_path(&path);
+    let temp = tempdir().unwrap();
+    let temp_path = temp.path().join("nested");
+    let (map, root) = load_path(&path, &temp_path);
 
-    assert_eq!(root, "test_files/old/nested");
-    assert_eq!(
-        map.get("test_files/old/nested"),
-        Some(&vec!["unchanged.txt".to_string()])
-    );
+    assert!(root.contains("nested"), "root should be the temp dir");
+    assert_eq!(map.get(&root), Some(&vec!["file.txt".to_string()]));
+    assert!(temp_path.join("file.txt").exists());
 }
 
 #[test]
@@ -302,13 +305,16 @@ fn test_load_path_file_in_current_dir() {
     use ripdiff::app::load_path;
     use std::fs;
     use std::path::PathBuf;
+    use tempfile::tempdir;
 
     fs::write("_test_temp_file.txt", "temp").unwrap();
     let path = PathBuf::from("_test_temp_file.txt");
-    let (map, root) = load_path(&path);
+    let temp = tempdir().unwrap();
+    let temp_path = temp.path().join("sub");
+    let (map, root) = load_path(&path, &temp_path);
     fs::remove_file("_test_temp_file.txt").unwrap();
 
-    // Bare filename has empty-string parent → map key is ""
-    assert_eq!(map.get(""), Some(&vec!["_test_temp_file.txt".to_string()]));
-    assert_eq!(root, "");
+    assert!(root.contains("sub"), "root should be the temp dir");
+    assert_eq!(map.get(&root), Some(&vec!["file.txt".to_string()]));
+    assert!(temp_path.join("file.txt").exists());
 }

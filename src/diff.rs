@@ -36,15 +36,27 @@ pub fn get_file_diff(
     } else {
         old_file_content.clone()
     };
-    let lines: Vec<_> = old_file_content.split('\n').collect();
     let patch = create_patch(&old_file_content, &new_file_content);
-    let mut current_line_idx = 0;
+    let stop = scroll_offset + height;
     if patch.hunks().is_empty() {
-        return (
-            Paragraph::new(old_file_content),
-            Paragraph::new(new_file_content),
-        );
+        old_lines = old_file_content
+            .split("\n")
+            .map(|x| Line::from(Span::styled(x.to_string(), Style::new())))
+            .collect();
+        old_lines = old_lines
+            [scroll_offset.clamp(0, new_lines.len())..stop.clamp(0, old_lines.len())]
+            .to_vec();
+        new_lines = new_file_content
+            .split("\n")
+            .map(|x| Line::from(Span::styled(x.to_string(), Style::new())))
+            .collect();
+        new_lines = new_lines
+            [scroll_offset.clamp(0, new_lines.len())..stop.clamp(0, new_lines.len())]
+            .to_vec();
+        return (Paragraph::new(old_lines), Paragraph::new(new_lines));
     }
+    let lines: Vec<_> = old_file_content.split('\n').collect();
+    let mut current_line_idx = 0;
     for hunk in patch.hunks() {
         let start_of_hunk = hunk.old_range().start().saturating_sub(1);
         while current_line_idx < start_of_hunk {
@@ -110,7 +122,6 @@ pub fn get_file_diff(
             num_modded_lines += 1;
         }
     }
-    let stop = scroll_offset + height;
 
     old_lines =
         old_lines[scroll_offset.clamp(0, old_lines.len())..stop.clamp(0, old_lines.len())].to_vec();
