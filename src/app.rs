@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tempfile::tempdir;
 
 #[derive(Parser)]
@@ -48,6 +48,10 @@ pub fn load_path(path: &PathBuf, temp_path: &Path) -> (HashMap<String, Vec<Strin
     }
 }
 
+pub fn build_status(elapsed: Duration) -> String {
+    format!("Scan: {}ms | TAB: Toggle", elapsed.as_millis())
+}
+
 impl App {
     pub fn run(self) -> anyhow::Result<()> {
         let start = Instant::now();
@@ -81,7 +85,7 @@ impl App {
         folder_display.par_sort_unstable();
         folder_display.reverse();
 
-        let status = format!("TTT: {}ms; TAB: Toggle", start.elapsed().as_millis());
+        let status = build_status(start.elapsed());
         let theme = Theme::default();
 
         let mut state = TuiState::new(
@@ -100,5 +104,30 @@ impl App {
         });
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_status_contains_elapsed_ms() {
+        let status = build_status(Duration::from_millis(1234));
+        assert!(status.contains("1234"), "status should show elapsed ms");
+        assert!(status.contains("ms"), "status should include unit");
+    }
+
+    #[test]
+    fn test_build_status_zero_time() {
+        let status = build_status(Duration::ZERO);
+        assert!(status.contains("0ms"), "zero elapsed should render as 0ms");
+    }
+
+    #[test]
+    fn test_build_status_no_placeholder() {
+        let status = build_status(Duration::from_millis(5));
+        assert!(!status.contains("TTT"), "placeholder should be removed");
+        assert!(status.contains("Scan:"), "status should describe the scan");
     }
 }

@@ -103,12 +103,9 @@ impl TuiState {
             let file_trimmed = file.trim();
             !(pth == path && children.iter().any(|x| x == file_trimmed))
         });
-        let ind = self
-            .open_files
-            .iter()
-            .position(|x| x == path)
-            .expect("Failed to find path in open files");
-        self.open_files.remove(ind);
+        if let Some(ind) = self.open_files.iter().position(|x| x == path) {
+            self.open_files.remove(ind);
+        }
     }
 }
 
@@ -321,6 +318,24 @@ mod tests {
         assert!(state.open_files.is_empty());
         assert_eq!(state.file_display.len(), 1);
         assert_eq!(state.file_display[0].1, "file");
+    }
+
+    #[test]
+    fn test_close_dir_path_not_open_does_not_panic() {
+        let mut state = make_state();
+        state.open_files = vec!["/a".to_string(), "/a/b".to_string()];
+        state.file_display = vec![
+            ("/".to_string(), "a".to_string()),
+            ("/a".to_string(), "  b".to_string()),
+        ];
+        let children = vec!["b".to_string()];
+
+        state.close_dir("/nonexistent", &children);
+
+        assert_eq!(state.open_files.len(), 2);
+        assert!(state.open_files.contains(&"/a".to_string()));
+        assert!(state.open_files.contains(&"/a/b".to_string()));
+        assert_eq!(state.file_display.len(), 2);
     }
 
     #[test]

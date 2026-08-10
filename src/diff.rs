@@ -44,7 +44,7 @@ pub fn get_file_diff(
             .map(|x| Line::from(Span::styled(x.to_string(), Style::new())))
             .collect();
         old_lines = old_lines
-            [scroll_offset.clamp(0, new_lines.len())..stop.clamp(0, old_lines.len())]
+            [scroll_offset.clamp(0, old_lines.len())..stop.clamp(0, old_lines.len())]
             .to_vec();
         new_lines = new_file_content
             .split("\n")
@@ -258,7 +258,6 @@ mod tests {
             10,
             &theme,
         );
-
         use ratatui::buffer::Buffer;
         use ratatui::layout::Rect;
         use ratatui::widgets::Widget;
@@ -533,5 +532,39 @@ mod tests {
         old_p.render(Rect::new(0, 0, 80, 50), &mut old_buf);
         new_p.render(Rect::new(0, 0, 80, 50), &mut new_buf);
         assert_ne!(format!("{:?}", old_buf), format!("{:?}", new_buf));
+    }
+
+    #[test]
+    fn test_unchanged_file_scrolls_old_pane() {
+        let theme = Theme::default();
+        let old_dir = tempfile::tempdir().unwrap();
+        let new_dir = tempfile::tempdir().unwrap();
+        let content: String = (0..40)
+            .map(|i| format!("Line {:03}: scrolling test line\n", i + 1))
+            .collect();
+        std::fs::write(old_dir.path().join("same.txt"), &content).unwrap();
+        std::fs::write(new_dir.path().join("same.txt"), &content).unwrap();
+
+        let old_root = old_dir.path().to_str().unwrap();
+        let new_root = new_dir.path().to_str().unwrap();
+        let path = format!("{}/same.txt", old_root);
+
+        let (old_p, _new_p) = get_file_diff(old_root, new_root, &path, 5, 10, &theme);
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        old_p.render(Rect::new(0, 0, 80, 10), &mut buf);
+        let rendered = format!("{:?}", buf);
+        assert!(
+            rendered.contains("Line 006"),
+            "scrolled pane should start at line 006"
+        );
+        assert!(
+            !rendered.contains("Line 001"),
+            "scrolled pane should not show the first line"
+        );
     }
 }

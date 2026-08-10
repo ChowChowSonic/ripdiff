@@ -34,7 +34,7 @@ ripdiff <old_directory|old_file> <new_directory|new_file>
 | `↑`/`↓` | Navigate file list |
 | `Enter` | Open selected file/directory |
 | `←`/`→` | Adjust filename display offset |
-| `PageUp`/`↓` | Scroll file contents |
+| `PageUp`/`PageDown` | Scroll file contents |
 | `k`/`j` | Scroll file diff content |
 | `Tab` | Toggle file sidebar |
 | `Esc` | Exit |
