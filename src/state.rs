@@ -1,4 +1,5 @@
 use crate::config::Theme;
+use crate::diff::DiffCacheEntry;
 use ratatui::widgets::ListState;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -18,6 +19,7 @@ pub struct TuiState {
     pub open_files: Vec<String>,
     pub theme: Theme,
     pub hide_sidebar: bool,
+    pub diff_cache: HashMap<String, DiffCacheEntry>,
 }
 
 impl TuiState {
@@ -54,6 +56,7 @@ impl TuiState {
             open_files: Vec::new(),
             theme,
             hide_sidebar,
+            diff_cache: HashMap::new(),
         }
     }
 
@@ -143,6 +146,7 @@ mod tests {
             open_files: Vec::new(),
             theme: Theme::default(),
             hide_sidebar: false,
+            diff_cache: HashMap::new(),
         }
     }
 
@@ -390,6 +394,7 @@ mod tests {
             open_files: Vec::new(),
             theme: Theme::default(),
             hide_sidebar: false,
+            diff_cache: HashMap::new(),
         };
         state.state.select_first();
 
@@ -417,6 +422,7 @@ mod tests {
             open_files: Vec::new(),
             theme: Theme::default(),
             hide_sidebar: false,
+            diff_cache: HashMap::new(),
         };
         state.state.select_first();
 
@@ -448,6 +454,7 @@ mod tests {
             open_files: vec!["/old/dir".to_string()],
             theme: Theme::default(),
             hide_sidebar: false,
+            diff_cache: HashMap::new(),
         };
         state.state.select_first();
 
@@ -473,6 +480,7 @@ mod tests {
             open_files: Vec::new(),
             theme: Theme::default(),
             hide_sidebar: false,
+            diff_cache: HashMap::new(),
         };
         // No select_first() called → selected() returns None
 
@@ -518,6 +526,7 @@ mod tests {
             open_files: Vec::new(),
             theme: Theme::default(),
             hide_sidebar: false,
+            diff_cache: HashMap::new(),
         };
         state.state.select_first();
 
@@ -554,6 +563,7 @@ mod tests {
             open_files: Vec::new(),
             theme: Theme::default(),
             hide_sidebar: false,
+            diff_cache: HashMap::new(),
         };
         state.state.select_first();
 
@@ -592,6 +602,7 @@ mod tests {
             open_files: Vec::new(),
             theme: Theme::default(),
             hide_sidebar: false,
+            diff_cache: HashMap::new(),
         };
         state.state.select_first();
 

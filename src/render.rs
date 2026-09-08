@@ -3,9 +3,64 @@ use crate::state::TuiState;
 use ratatui::{
     Frame,
     style::{Modifier, Style},
-    text::Line,
+    text::{Line, Span},
     widgets::{Block, Borders, List, ListItem},
 };
+use std::collections::HashMap;
+
+fn entry_style(
+    dir: &str,
+    name: &str,
+    old_root: &str,
+    new_root: &str,
+    old_files: &HashMap<String, Vec<String>>,
+    new_files: &HashMap<String, Vec<String>>,
+    theme: &crate::config::Theme,
+) -> Option<Style> {
+    let trimmed = name.trim();
+    let full_path = format!("{dir}/{trimmed}");
+
+    let alt_dir = if let Some(rest) = dir.strip_prefix(old_root) {
+        Some(format!("{new_root}{rest}"))
+    } else {
+        dir.strip_prefix(new_root)
+            .map(|rest| format!("{old_root}{rest}"))
+    };
+
+    let is_dir = old_files.contains_key(&full_path) || new_files.contains_key(&full_path);
+
+    let (in_old, in_new) = if is_dir {
+        let mut io = old_files.contains_key(&full_path);
+        let mut inn = new_files.contains_key(&full_path);
+        if let Some(ref a) = alt_dir {
+            io |= old_files.contains_key(a);
+            inn |= new_files.contains_key(a);
+        }
+        (io, inn)
+    } else {
+        let mut io = old_files
+            .get(dir)
+            .is_some_and(|c| c.iter().any(|f| f == trimmed));
+        let mut inn = new_files
+            .get(dir)
+            .is_some_and(|c| c.iter().any(|f| f == trimmed));
+        if let Some(ref a) = alt_dir {
+            io |= old_files
+                .get(a)
+                .is_some_and(|c| c.iter().any(|f| f == trimmed));
+            inn |= new_files
+                .get(a)
+                .is_some_and(|c| c.iter().any(|f| f == trimmed));
+        }
+        (io, inn)
+    };
+
+    match (in_old, in_new) {
+        (true, false) => Some(Style::new().fg(theme.removed)),
+        (false, true) => Some(Style::new().fg(theme.added)),
+        _ => None,
+    }
+}
 
 pub fn slice_display_name(name: &str, offset: usize, max_offset: usize) -> &str {
     let start = offset.min(name.len());
@@ -33,8 +88,26 @@ pub fn draw(frame: &mut Frame, state: &mut TuiState) {
         let items: Vec<ListItem> = state
             .file_display
             .iter()
-            .map(|(_path, name)| {
-                ListItem::new(slice_display_name(name, state.file_name_offset, max_offset))
+            .map(|(path, name)| {
+                let start = state.file_name_offset.min(name.len());
+                let end = max_offset.min(name.len());
+                let mut indices = name.char_indices().map(|(i, _)| i);
+                let byte_start = indices.nth(start).unwrap_or(name.len());
+                let byte_end = indices.nth(end - start - 1).unwrap_or(name.len());
+                let text = &name[byte_start..byte_end];
+                let style = entry_style(
+                    path,
+                    name,
+                    &state.old_root,
+                    &state.new_root,
+                    &state.old_files,
+                    &state.new_files,
+                    &state.theme,
+                );
+                match style {
+                    Some(s) => ListItem::new(Span::styled(text.to_string(), s)),
+                    None => ListItem::new(Span::raw(text.to_string())),
+                }
             })
             .collect();
 
@@ -81,6 +154,7 @@ pub fn draw(frame: &mut Frame, state: &mut TuiState) {
         state.file_scroll_offset,
         height,
         &state.theme,
+        &mut state.diff_cache,
     );
 
     frame.render_widget(old_file.block(old_block).left_aligned(), old_area);

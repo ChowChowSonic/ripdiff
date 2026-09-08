@@ -46,6 +46,7 @@ fn test_diff_unchanged_file_identical_panes() {
         0,
         20,
         &theme,
+        &mut HashMap::new(),
     );
 
     use ratatui::buffer::Buffer;
@@ -69,6 +70,7 @@ fn test_diff_modified_file_different_panes() {
         0,
         20,
         &theme,
+        &mut HashMap::new(),
     );
 
     use ratatui::buffer::Buffer;
@@ -92,6 +94,7 @@ fn test_diff_added_file_old_side_error() {
         0,
         10,
         &theme,
+        &mut HashMap::new(),
     );
 
     use ratatui::buffer::Buffer;
@@ -112,6 +115,7 @@ fn test_diff_deleted_file_new_side_error() {
         0,
         10,
         &theme,
+        &mut HashMap::new(),
     );
 
     use ratatui::buffer::Buffer;
@@ -132,6 +136,7 @@ fn test_diff_empty_file_identical_panes() {
         0,
         10,
         &theme,
+        &mut HashMap::new(),
     );
 
     use ratatui::buffer::Buffer;
@@ -155,6 +160,7 @@ fn test_diff_deeply_nested_unchanged_file() {
         0,
         10,
         &theme,
+        &mut HashMap::new(),
     );
 
     use ratatui::buffer::Buffer;
@@ -178,6 +184,7 @@ fn test_diff_whitespace_changes() {
         0,
         10,
         &theme,
+        &mut HashMap::new(),
     );
 
     use ratatui::buffer::Buffer;
@@ -201,6 +208,7 @@ fn test_binary_file_no_panic() {
         0,
         10,
         &theme,
+        &mut HashMap::new(),
     );
 }
 
@@ -214,6 +222,7 @@ fn test_unicode_filename_no_panic() {
         0,
         10,
         &theme,
+        &mut HashMap::new(),
     );
 }
 
@@ -227,6 +236,7 @@ fn test_file_with_spaces_in_name_no_panic() {
         0,
         10,
         &theme,
+        &mut HashMap::new(),
     );
 }
 
@@ -240,6 +250,7 @@ fn test_scroll_offset_returns_subset_of_lines() {
         5,
         10,
         &theme,
+        &mut HashMap::new(),
     );
 
     use ratatui::buffer::Buffer;

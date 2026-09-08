@@ -5,60 +5,80 @@ use ratatui::{
     text::{Line, Span},
     widgets::Paragraph,
 };
+use std::collections::HashMap;
 use std::fs;
 
-pub fn get_file_diff(
-    old_root: &str,
-    new_root: &str,
-    path: &str,
+#[derive(Clone)]
+pub enum OwnedLineType {
+    Context,
+    Delete,
+    Insert,
+}
+
+#[derive(Clone)]
+pub struct OwnedHunk {
+    pub old_start: usize,
+    pub lines: Vec<(OwnedLineType, String)>,
+}
+
+pub struct DiffCacheEntry {
+    pub old_content: String,
+    pub hunks: Vec<OwnedHunk>,
+}
+
+fn hunks_from_patch(old_content: &str, new_content: &str) -> Vec<OwnedHunk> {
+    let patch = create_patch(old_content, new_content);
+    patch
+        .hunks()
+        .iter()
+        .map(|h| OwnedHunk {
+            old_start: h.old_range().start(),
+            lines: h
+                .lines()
+                .iter()
+                .map(|l| match l {
+                    diffy::Line::Context(c) => (OwnedLineType::Context, c.to_string()),
+                    diffy::Line::Delete(c) => (OwnedLineType::Delete, c.to_string()),
+                    diffy::Line::Insert(c) => (OwnedLineType::Insert, c.to_string()),
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+fn compute_styled_lines(
+    old_content: &str,
+    hunks: &[OwnedHunk],
     scroll_offset: usize,
     height: usize,
     theme: &Theme,
-) -> (Paragraph<'static>, Paragraph<'static>) {
-    let mut rel_path: String = if let Some(stripped) = path.strip_prefix(old_root) {
-        stripped.to_string()
-    } else if let Some(stripped) = path.strip_prefix(new_root) {
-        stripped.to_string()
-    } else {
-        path.to_string()
-    };
-    if !rel_path.starts_with('/') {
-        rel_path.insert(0, '/');
-    }
-    let file1 = format!("{}{}", old_root, rel_path);
-    let file2 = format!("{}{}", new_root, rel_path);
+) -> (Vec<Line<'static>>, Vec<Line<'static>>) {
     let mut old_lines: Vec<Line> = Vec::new();
     let mut new_lines: Vec<Line> = Vec::new();
-    let old_file_content = fs::read_to_string(&file1).unwrap_or_else(|_| "".to_string());
-
-    let new_file_content = if file1 != file2 {
-        fs::read_to_string(&file2).unwrap_or_else(|_| "".to_string())
-    } else {
-        old_file_content.clone()
-    };
-    let patch = create_patch(&old_file_content, &new_file_content);
     let stop = scroll_offset + height;
-    if patch.hunks().is_empty() {
-        old_lines = old_file_content
+
+    if hunks.is_empty() {
+        old_lines = old_content
             .split("\n")
             .map(|x| Line::from(Span::styled(x.to_string(), Style::new())))
             .collect();
         old_lines = old_lines
             [scroll_offset.clamp(0, old_lines.len())..stop.clamp(0, old_lines.len())]
             .to_vec();
-        new_lines = new_file_content
+        let new_lines_full: Vec<Line> = old_content
             .split("\n")
             .map(|x| Line::from(Span::styled(x.to_string(), Style::new())))
             .collect();
-        new_lines = new_lines
-            [scroll_offset.clamp(0, new_lines.len())..stop.clamp(0, new_lines.len())]
+        new_lines = new_lines_full
+            [scroll_offset.clamp(0, new_lines_full.len())..stop.clamp(0, new_lines_full.len())]
             .to_vec();
-        return (Paragraph::new(old_lines), Paragraph::new(new_lines));
+        return (old_lines, new_lines);
     }
-    let lines: Vec<_> = old_file_content.split('\n').collect();
+
+    let lines: Vec<_> = old_content.split('\n').collect();
     let mut current_line_idx = 0;
-    for hunk in patch.hunks() {
-        let start_of_hunk = hunk.old_range().start().saturating_sub(1);
+    for hunk in hunks {
+        let start_of_hunk = hunk.old_start.saturating_sub(1);
         while current_line_idx < start_of_hunk {
             let line = Line::from(Span::raw(
                 lines
@@ -71,9 +91,9 @@ pub fn get_file_diff(
             current_line_idx += 1;
         }
         let mut num_modded_lines: i64 = 0;
-        for line in hunk.lines() {
-            match line {
-                diffy::Line::Context(content) => {
+        for (line_type, content) in &hunk.lines {
+            match line_type {
+                OwnedLineType::Context => {
                     while num_modded_lines > 0 {
                         old_lines.push(Line::from(Span::styled(
                             " ".to_string(),
@@ -88,19 +108,19 @@ pub fn get_file_diff(
                         )));
                         num_modded_lines += 1;
                     }
-                    let line = Line::from(Span::raw(content.to_string()));
+                    let line = Line::from(Span::raw(content.clone()));
                     current_line_idx += 1;
                     old_lines.push(line.clone());
                     new_lines.push(line.clone());
                 }
-                diffy::Line::Delete(content) => {
-                    let line = Line::from(Span::styled(content.to_string(), theme.removed));
+                OwnedLineType::Delete => {
+                    let line = Line::from(Span::styled(content.clone(), theme.removed));
                     current_line_idx += 1;
                     old_lines.push(line);
                     num_modded_lines -= 1;
                 }
-                diffy::Line::Insert(content) => {
-                    let line = Line::from(Span::styled(content.to_string(), theme.added));
+                OwnedLineType::Insert => {
+                    let line = Line::from(Span::styled(content.clone(), theme.added));
                     new_lines.push(line);
                     num_modded_lines += 1;
                 }
@@ -127,6 +147,53 @@ pub fn get_file_diff(
         old_lines[scroll_offset.clamp(0, old_lines.len())..stop.clamp(0, old_lines.len())].to_vec();
     new_lines =
         new_lines[scroll_offset.clamp(0, new_lines.len())..stop.clamp(0, new_lines.len())].to_vec();
+    (old_lines, new_lines)
+}
+
+pub fn get_file_diff(
+    old_root: &str,
+    new_root: &str,
+    path: &str,
+    scroll_offset: usize,
+    height: usize,
+    theme: &Theme,
+    cache: &mut HashMap<String, DiffCacheEntry>,
+) -> (Paragraph<'static>, Paragraph<'static>) {
+    let mut rel_path: String = if let Some(stripped) = path.strip_prefix(old_root) {
+        stripped.to_string()
+    } else if let Some(stripped) = path.strip_prefix(new_root) {
+        stripped.to_string()
+    } else {
+        path.to_string()
+    };
+    if !rel_path.starts_with('/') {
+        rel_path.insert(0, '/');
+    }
+    let file1 = format!("{}{}", old_root, rel_path);
+    let file2 = format!("{}{}", new_root, rel_path);
+
+    let (old_content, hunks) = if let Some(entry) = cache.get(path) {
+        (entry.old_content.clone(), entry.hunks.clone())
+    } else {
+        let old_file_content = fs::read_to_string(&file1).unwrap_or_else(|_| "".to_string());
+        let new_file_content = if file1 != file2 {
+            fs::read_to_string(&file2).unwrap_or_else(|_| "".to_string())
+        } else {
+            old_file_content.clone()
+        };
+        let hunks = hunks_from_patch(&old_file_content, &new_file_content);
+        cache.insert(
+            path.to_string(),
+            DiffCacheEntry {
+                old_content: old_file_content.clone(),
+                hunks: hunks.clone(),
+            },
+        );
+        (old_file_content, hunks)
+    };
+
+    let (old_lines, new_lines) =
+        compute_styled_lines(&old_content, &hunks, scroll_offset, height, theme);
     (Paragraph::new(old_lines), Paragraph::new(new_lines))
 }
 
@@ -149,6 +216,7 @@ mod tests {
             0,
             10,
             &theme,
+            &mut HashMap::new(),
         );
 
         use ratatui::buffer::Buffer;
@@ -172,6 +240,7 @@ mod tests {
             0,
             10,
             &theme,
+            &mut HashMap::new(),
         );
 
         use ratatui::buffer::Buffer;
@@ -188,7 +257,15 @@ mod tests {
     #[test]
     fn test_path_matches_neither_root() {
         let theme = Theme::default();
-        let (old_p, new_p) = get_file_diff(OLD_DIR, NEW_DIR, "/nonexistent/path", 0, 10, &theme);
+        let (old_p, new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
+            "/nonexistent/path",
+            0,
+            10,
+            &theme,
+            &mut HashMap::new(),
+        );
 
         use ratatui::buffer::Buffer;
         use ratatui::layout::Rect;
@@ -212,6 +289,7 @@ mod tests {
             0,
             10,
             &theme,
+            &mut HashMap::new(),
         );
 
         use ratatui::buffer::Buffer;
@@ -235,6 +313,7 @@ mod tests {
             0,
             5,
             &theme,
+            &mut HashMap::new(),
         );
 
         use ratatui::buffer::Buffer;
@@ -257,6 +336,7 @@ mod tests {
             5,
             10,
             &theme,
+            &mut HashMap::new(),
         );
         use ratatui::buffer::Buffer;
         use ratatui::layout::Rect;
@@ -278,6 +358,7 @@ mod tests {
             100,
             5,
             &theme,
+            &mut HashMap::new(),
         );
 
         use ratatui::buffer::Buffer;
@@ -298,6 +379,7 @@ mod tests {
             0,
             500,
             &theme,
+            &mut HashMap::new(),
         );
 
         use ratatui::buffer::Buffer;
@@ -311,8 +393,15 @@ mod tests {
     #[test]
     fn test_empty_file_identical() {
         let theme = Theme::default();
-        let (old_p, new_p) =
-            get_file_diff(OLD_DIR, NEW_DIR, "test_files/old/empty.txt", 0, 10, &theme);
+        let (old_p, new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
+            "test_files/old/empty.txt",
+            0,
+            10,
+            &theme,
+            &mut HashMap::new(),
+        );
 
         use ratatui::buffer::Buffer;
         use ratatui::layout::Rect;
@@ -335,6 +424,7 @@ mod tests {
             0,
             20,
             &theme,
+            &mut HashMap::new(),
         );
 
         use ratatui::buffer::Buffer;
@@ -358,6 +448,7 @@ mod tests {
             0,
             10,
             &theme,
+            &mut HashMap::new(),
         );
 
         use ratatui::buffer::Buffer;
@@ -378,6 +469,7 @@ mod tests {
             0,
             10,
             &theme,
+            &mut HashMap::new(),
         );
 
         use ratatui::buffer::Buffer;
@@ -391,15 +483,29 @@ mod tests {
     #[test]
     fn test_binary_file_does_not_panic() {
         let theme = Theme::default();
-        let (_old_p, _new_p) =
-            get_file_diff(OLD_DIR, NEW_DIR, "test_files/old/binary.bin", 0, 10, &theme);
+        let (_old_p, _new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
+            "test_files/old/binary.bin",
+            0,
+            10,
+            &theme,
+            &mut HashMap::new(),
+        );
     }
 
     #[test]
     fn test_unicode_filename() {
         let theme = Theme::default();
-        let (_old_p, _new_p) =
-            get_file_diff(OLD_DIR, NEW_DIR, "test_files/old/中文.txt", 0, 10, &theme);
+        let (_old_p, _new_p) = get_file_diff(
+            OLD_DIR,
+            NEW_DIR,
+            "test_files/old/中文.txt",
+            0,
+            10,
+            &theme,
+            &mut HashMap::new(),
+        );
     }
 
     #[test]
@@ -412,6 +518,7 @@ mod tests {
             0,
             10,
             &theme,
+            &mut HashMap::new(),
         );
     }
 
@@ -425,6 +532,7 @@ mod tests {
             0,
             10,
             &theme,
+            &mut HashMap::new(),
         );
 
         use ratatui::buffer::Buffer;
@@ -448,6 +556,7 @@ mod tests {
             0,
             10,
             &theme,
+            &mut HashMap::new(),
         );
 
         use ratatui::buffer::Buffer;
@@ -475,6 +584,7 @@ mod tests {
             0,
             20,
             &theme,
+            &mut HashMap::new(),
         );
 
         use ratatui::buffer::Buffer;
@@ -498,6 +608,7 @@ mod tests {
             0,
             10,
             &theme,
+            &mut HashMap::new(),
         );
 
         use ratatui::buffer::Buffer;
@@ -521,6 +632,7 @@ mod tests {
             0,
             50,
             &theme,
+            &mut HashMap::new(),
         );
 
         use ratatui::buffer::Buffer;
@@ -548,8 +660,9 @@ mod tests {
         let old_root = old_dir.path().to_str().unwrap();
         let new_root = new_dir.path().to_str().unwrap();
         let path = format!("{}/same.txt", old_root);
-
-        let (old_p, _new_p) = get_file_diff(old_root, new_root, &path, 5, 10, &theme);
+        let mut tmp_cache: HashMap<String, DiffCacheEntry> = HashMap::new();
+        let (old_p, _new_p) =
+            get_file_diff(old_root, new_root, &path, 5, 10, &theme, &mut tmp_cache);
 
         use ratatui::buffer::Buffer;
         use ratatui::layout::Rect;
