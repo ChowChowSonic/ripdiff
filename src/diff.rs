@@ -21,9 +21,61 @@ pub struct OwnedHunk {
     pub lines: Vec<(OwnedLineType, String)>,
 }
 
+pub fn change_region_offsets(hunks: &[OwnedHunk]) -> Vec<usize> {
+    let mut offsets = Vec::new();
+    let mut row = 0usize;
+    let mut pending: i64 = 0;
+    let mut current_line_idx = 0usize;
+    let mut in_region = false;
+
+    for hunk in hunks {
+        let start_of_hunk = hunk.old_start.saturating_sub(1);
+        row += start_of_hunk.saturating_sub(current_line_idx);
+        current_line_idx = current_line_idx.max(start_of_hunk);
+
+        for (line_type, _) in &hunk.lines {
+            match line_type {
+                OwnedLineType::Context => {
+                    if pending > 0 {
+                        row += pending as usize;
+                    }
+                    pending = 0;
+                    row += 1;
+                    current_line_idx += 1;
+                    in_region = false;
+                }
+                OwnedLineType::Delete => {
+                    if !in_region {
+                        offsets.push(row);
+                        in_region = true;
+                    }
+                    row += 1;
+                    current_line_idx += 1;
+                    pending -= 1;
+                }
+                OwnedLineType::Insert => {
+                    if !in_region {
+                        offsets.push(row);
+                        in_region = true;
+                    }
+                    pending += 1;
+                }
+            }
+        }
+        if pending > 0 {
+            row += pending as usize;
+        }
+        pending = 0;
+        in_region = false;
+    }
+
+    offsets
+}
+
 pub struct DiffCacheEntry {
     pub old_content: String,
     pub hunks: Vec<OwnedHunk>,
+    pub change_region_offsets: Vec<usize>,
 }
 
 fn hunks_from_patch(old_content: &str, new_content: &str) -> Vec<OwnedHunk> {
@@ -187,6 +239,7 @@ pub fn get_file_diff(
             DiffCacheEntry {
                 old_content: old_file_content.clone(),
                 hunks: hunks.clone(),
+                change_region_offsets: change_region_offsets(&hunks),
             },
         );
         (old_file_content, hunks)
@@ -678,6 +731,206 @@ mod tests {
         assert!(
             !rendered.contains("Line 001"),
             "scrolled pane should not show the first line"
+        );
+    }
+
+    fn first_row_text(buf: &ratatui::buffer::Buffer) -> String {
+        (0..buf.area.width)
+            .map(|x| {
+                buf.cell((x, 0))
+                    .and_then(|c| c.symbol().chars().next())
+                    .unwrap_or(' ')
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_jump_offset_puts_change_on_first_line_fixture() {
+        let theme = Theme::default();
+        let path = "test_files/old/modified.txt";
+        let mut cache: HashMap<String, DiffCacheEntry> = HashMap::new();
+        let (_, _) = get_file_diff(OLD_DIR, NEW_DIR, path, 0, 10, &theme, &mut cache);
+
+        let entry = cache.get(path).unwrap();
+        let target = change_region_offsets(&entry.hunks)[0];
+        assert_eq!(target, 1, "leading context is line 1, change at line 2");
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let (old_p, new_p) = get_file_diff(OLD_DIR, NEW_DIR, path, target, 10, &theme, &mut cache);
+        let mut old_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        old_p.render(Rect::new(0, 0, 80, 10), &mut old_buf);
+        assert!(
+            first_row_text(&old_buf).starts_with("Line 2: This line will be modified"),
+            "old pane first row should be the deleted line, got: {}",
+            first_row_text(&old_buf)
+        );
+
+        let mut new_buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        new_p.render(Rect::new(0, 0, 80, 10), &mut new_buf);
+        assert!(
+            first_row_text(&new_buf).starts_with("Line 2: THIS LINE HAS BEEN MODIFIED"),
+            "new pane first row should be the inserted line, got: {}",
+            first_row_text(&new_buf)
+        );
+    }
+
+    #[test]
+    fn test_jump_offset_puts_change_on_first_line_three_context() {
+        let theme = Theme::default();
+        let old_dir = tempfile::tempdir().unwrap();
+        let new_dir = tempfile::tempdir().unwrap();
+        let old_content: String = (0..10).map(|i| format!("Line {:03}\n", i + 1)).collect();
+        let new_content = old_content.replacen("Line 005\n", "Line 005 CHANGED\n", 1);
+        std::fs::write(old_dir.path().join("f.txt"), &old_content).unwrap();
+        std::fs::write(new_dir.path().join("f.txt"), &new_content).unwrap();
+
+        let old_root = old_dir.path().to_str().unwrap();
+        let new_root = new_dir.path().to_str().unwrap();
+        let path = format!("{}/f.txt", old_root);
+        let mut cache: HashMap<String, DiffCacheEntry> = HashMap::new();
+        let (_, _) = get_file_diff(old_root, new_root, &path, 0, 10, &theme, &mut cache);
+
+        let entry = cache.get(&path).unwrap();
+        let target = change_region_offsets(&entry.hunks)[0];
+        assert_eq!(target, 4, "change is 0-based line 4 (line 005)");
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let (old_p, _new_p) =
+            get_file_diff(old_root, new_root, &path, target, 10, &theme, &mut cache);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        old_p.render(Rect::new(0, 0, 80, 10), &mut buf);
+        assert!(
+            first_row_text(&buf).starts_with("Line 005"),
+            "old pane first row should be the changed line, got: {}",
+            first_row_text(&buf)
+        );
+    }
+
+    #[test]
+    fn test_change_region_offsets_merged_hunk_multiple_regions() {
+        let hunks = vec![OwnedHunk {
+            old_start: 1,
+            lines: vec![
+                (OwnedLineType::Context, "l1".into()),
+                (OwnedLineType::Delete, "l2".into()),
+                (OwnedLineType::Insert, "l2'".into()),
+                (OwnedLineType::Context, "l3".into()),
+                (OwnedLineType::Context, "l4".into()),
+                (OwnedLineType::Delete, "l5".into()),
+                (OwnedLineType::Insert, "l5'".into()),
+                (OwnedLineType::Context, "l6".into()),
+                (OwnedLineType::Insert, "a".into()),
+                (OwnedLineType::Insert, "b".into()),
+            ],
+        }];
+        assert_eq!(change_region_offsets(&hunks), vec![1, 4, 6]);
+    }
+
+    #[test]
+    fn test_change_region_offsets_insert_padding_shifts_later_region() {
+        // Old: l1..l45. One change replaces l2 with two lines (an insert),
+        // another change hits l40. The insert adds two padding rows on the old
+        // side, so l40's change (raw 0-based index 39) lands at display row 41.
+        let hunks = vec![
+            OwnedHunk {
+                old_start: 1,
+                lines: vec![
+                    (OwnedLineType::Context, "l1".into()),
+                    (OwnedLineType::Delete, "l2".into()),
+                    (OwnedLineType::Insert, "l2'".into()),
+                    (OwnedLineType::Insert, "extra".into()),
+                ],
+            },
+            OwnedHunk {
+                old_start: 37,
+                lines: vec![
+                    (OwnedLineType::Context, "l37".into()),
+                    (OwnedLineType::Context, "l38".into()),
+                    (OwnedLineType::Context, "l39".into()),
+                    (OwnedLineType::Delete, "l40".into()),
+                ],
+            },
+        ];
+        assert_eq!(change_region_offsets(&hunks), vec![1, 40]);
+    }
+
+    #[test]
+    fn test_many_hunks_fixture_visits_all_regions() {
+        let theme = Theme::default();
+        let path = "test_files/old/many_hunks.txt";
+        let mut cache: HashMap<String, DiffCacheEntry> = HashMap::new();
+        let (_, _) = get_file_diff(OLD_DIR, NEW_DIR, path, 0, 50, &theme, &mut cache);
+
+        let entry = cache.get(path).unwrap();
+        let offsets = entry.change_region_offsets.clone();
+        assert!(
+            offsets.len() >= 2,
+            "the many-hunks fixture should split into multiple change regions, got {offsets:?}"
+        );
+
+        let mut scroll = 0;
+        for expected in &offsets {
+            let target = offsets.iter().copied().find(|o| *o > scroll);
+            assert_eq!(target, Some(*expected));
+            scroll = target.unwrap();
+        }
+        assert!(
+            offsets.iter().all(|o| *o <= scroll),
+            "all regions should be reachable by pressing '/' (last scroll {scroll}, offsets {offsets:?})"
+        );
+    }
+
+    #[test]
+    fn test_later_region_after_insert_puts_change_on_first_line() {
+        // Old has an edit at line 3 (accompanied by an insert) and a later
+        // edit at line 15, far enough apart that diffy splits them into two
+        // hunks. The insert's padding row must not offset the later region.
+        let theme = Theme::default();
+        let old_dir = tempfile::tempdir().unwrap();
+        let new_dir = tempfile::tempdir().unwrap();
+        let old_content: String = (0..20).map(|i| format!("Line {:03}\n", i + 1)).collect();
+        let new_content = format!(
+            "Line 001\nLine 002\nLine 003 CHANGED\nINSERTED\nLine 004\nLine 005\n\
+             Line 006\nLine 007\nLine 008\nLine 009\nLine 010\nLine 011\nLine 012\n\
+             Line 013\nLine 014\nLine 015 CHANGED\nLine 016\nLine 017\nLine 018\n\
+             Line 019\nLine 020\n"
+        );
+        std::fs::write(old_dir.path().join("f.txt"), &old_content).unwrap();
+        std::fs::write(new_dir.path().join("f.txt"), &new_content).unwrap();
+
+        let old_root = old_dir.path().to_str().unwrap();
+        let new_root = new_dir.path().to_str().unwrap();
+        let path = format!("{}/f.txt", old_root);
+        let mut cache: HashMap<String, DiffCacheEntry> = HashMap::new();
+        let (_, _) = get_file_diff(old_root, new_root, &path, 0, 20, &theme, &mut cache);
+        let entry = cache.get(&path).unwrap();
+        let offsets = entry.change_region_offsets.clone();
+        assert_eq!(
+            offsets.len(),
+            2,
+            "expected two change regions, got {offsets:?}"
+        );
+
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::Widget;
+
+        let (old_p, _new_p) = get_file_diff(
+            old_root, new_root, &path, offsets[1], 20, &theme, &mut cache,
+        );
+        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 20));
+        old_p.render(Rect::new(0, 0, 80, 20), &mut buf);
+        assert!(
+            first_row_text(&buf).starts_with("Line 015"),
+            "later change should render on the first row at offset {}, got: {}",
+            offsets[1],
+            first_row_text(&buf)
         );
     }
 }

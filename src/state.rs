@@ -94,6 +94,23 @@ impl TuiState {
         self.current_file = Some(full_path);
     }
 
+    pub fn jump_to_next_change(&mut self) {
+        let Some(file) = self.current_file.clone() else {
+            return;
+        };
+        let Some(cache) = self.diff_cache.get(&file) else {
+            return;
+        };
+        let target = cache
+            .change_region_offsets
+            .iter()
+            .copied()
+            .find(|offset| *offset > self.file_scroll_offset);
+        if let Some(target) = target {
+            self.file_scroll_offset = target;
+        }
+    }
+
     fn close_dir(&mut self, path: &str, children: &[String]) {
         for x in children {
             let full_path = format!("{}/{}", path, x.trim_start());
@@ -129,6 +146,7 @@ pub fn get_joined_paths(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diff::{OwnedHunk, OwnedLineType};
 
     fn make_state() -> TuiState {
         TuiState {
@@ -609,5 +627,96 @@ mod tests {
         state.open_file_or_dir();
 
         assert_eq!(state.current_file, Some("/new/file.txt".to_string()));
+    }
+
+    fn hunk(old_start: usize, lines: Vec<(OwnedLineType, String)>) -> OwnedHunk {
+        OwnedHunk { old_start, lines }
+    }
+
+    fn state_with_hunks(hunks: Vec<OwnedHunk>) -> TuiState {
+        let mut state = make_state();
+        state.current_file = Some("/root/file.txt".to_string());
+        state.diff_cache = HashMap::from([(
+            "/root/file.txt".to_string(),
+            DiffCacheEntry {
+                old_content: String::new(),
+                change_region_offsets: crate::diff::change_region_offsets(&hunks),
+                hunks,
+            },
+        )]);
+        state
+    }
+
+    // One merged hunk spanning three change regions, with context lines
+    // between the regions (the "context between changes" case).
+    fn merged_hunk_state() -> TuiState {
+        state_with_hunks(vec![hunk(
+            1,
+            vec![
+                (OwnedLineType::Context, "l1".into()),
+                (OwnedLineType::Delete, "l2".into()),
+                (OwnedLineType::Insert, "l2'".into()),
+                (OwnedLineType::Context, "l3".into()),
+                (OwnedLineType::Context, "l4".into()),
+                (OwnedLineType::Delete, "l5".into()),
+                (OwnedLineType::Insert, "l5'".into()),
+                (OwnedLineType::Context, "l6".into()),
+                (OwnedLineType::Insert, "a".into()),
+                (OwnedLineType::Insert, "b".into()),
+            ],
+        )])
+    }
+
+    #[test]
+    fn test_jump_to_next_change_steps_through_regions() {
+        let mut state = merged_hunk_state();
+        state.file_scroll_offset = 0;
+
+        state.jump_to_next_change();
+        assert_eq!(state.file_scroll_offset, 1);
+        state.jump_to_next_change();
+        assert_eq!(state.file_scroll_offset, 4);
+        state.jump_to_next_change();
+        assert_eq!(state.file_scroll_offset, 6);
+        state.jump_to_next_change();
+        assert_eq!(state.file_scroll_offset, 6);
+    }
+
+    #[test]
+    fn test_jump_to_next_change_between_regions_in_same_hunk() {
+        let mut state = merged_hunk_state();
+        state.file_scroll_offset = 2;
+
+        state.jump_to_next_change();
+        assert_eq!(state.file_scroll_offset, 4);
+    }
+
+    #[test]
+    fn test_jump_to_next_change_from_inside_leading_context() {
+        let mut state = state_with_hunks(vec![hunk(
+            5,
+            vec![
+                (OwnedLineType::Context, "l5".into()),
+                (OwnedLineType::Context, "l6".into()),
+                (OwnedLineType::Context, "l7".into()),
+                (OwnedLineType::Delete, "l8".into()),
+            ],
+        )]);
+        state.file_scroll_offset = 4;
+
+        state.jump_to_next_change();
+        assert_eq!(state.file_scroll_offset, 7);
+    }
+
+    #[test]
+    fn test_jump_to_next_change_no_file_or_cache() {
+        let mut state = make_state();
+        state.file_scroll_offset = 3;
+        state.jump_to_next_change();
+        assert_eq!(state.file_scroll_offset, 3);
+
+        state.current_file = Some("/missing.txt".to_string());
+        state.jump_to_next_change();
+        assert_eq!(state.file_scroll_offset, 3);
     }
 }

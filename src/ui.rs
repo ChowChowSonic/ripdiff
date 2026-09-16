@@ -39,17 +39,7 @@ fn handle_events(state: &mut TuiState) -> std::io::Result<()> {
                 state.file_scroll_offset += 1;
             }
             KeyCode::Tab => state.hide_sidebar = !state.hide_sidebar,
-            KeyCode::Char('/') => {
-                if let Some(file) = &state.current_file
-                    && let Some(cache) = &state.diff_cache.get(file)
-                {
-                    let mut x = cache.hunks.clone();
-                    x.retain(|x| x.old_start > state.file_scroll_offset);
-                    if let Some(pos) = x.first() {
-                        state.file_scroll_offset = pos.old_start;
-                    }
-                }
-            }
+            KeyCode::Char('/') => state.jump_to_next_change(),
             _ => {}
         }
     }
